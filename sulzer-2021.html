@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sulzer et al. (2021) — Battery lifetime prediction from field data</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #fffdf8; font-family: system-ui, sans-serif; }
+  .markmap { width: 100%; height: 100vh; }
+  .markmap > svg { width: 100%; height: 100%; }
+  #hint { position: fixed; bottom: 10px; right: 14px; color: #999; font-size: 12px; }
+</style>
+<script>window.markmap = { autoLoader: { toolbar: true } };</script>
+<script src="https://cdn.jsdelivr.net/npm/markmap-autoloader@0.18"></script>
+</head>
+<body>
+<div class="markmap">
+<script type="text/template">
+---
+markmap:
+  colorFreezeLevel: 2
+  initialExpandLevel: 2
+  maxWidth: 260
+---
+
+# ❓ How can we predict battery life from messy field data?<br>Sulzer et al. 2021
+
+## 🧩 Problem
+- **Why life prediction matters** (p. 1)
+  - shorter development, better manufacturing
+  - lower warranty/insurance cost, less over-engineering
+  - enables second life → circular economy
+- **End of life** = can't meet range/power need (p. 1)
+  - key metrics: capacity (energy) + resistance (power)
+  - auto cells "degraded" at 80% SOH (p. 2)
+- **Accuracy target**: SOH error ≤5%, ideally 2% (p. 2)
+- **Aging drivers** (p. 1–2)
+  - intrinsic: manufacturing variability, pack design
+  - extrinsic: temperature, usage intensity
+- **Gap**: literature = small, controlled lab datasets (p. 2)
+
+## 🔬 Lab vs field
+- **Lab = controlled** (p. 4)
+  - fixed cycling, regular RPTs = ground truth
+  - cycled to 80% end of life
+  - but accelerated (high C-rate/T) → can mislead (p. 4, 8)
+- **Why field data adds value** (p. 8–9)
+  - lab channels too few; combos grow factorially
+  - field covers real conditions at low cost
+  - lab extremes → under-predict life → over-engineering
+  - field has seasons, vibration, rests (p. 8–9)
+- **3 field challenges** (p. 9–10)
+  - uncontrolled, path-dependent usage; unknown future use
+  - poor data: noise, sensors, missing/false data
+  - no validation: no RPTs, few cells reach EOL
+- **Data-quality details** (p. 10)
+  - cell-to-cell variation inside packs
+  - SOC microcycling → little range covered
+  - no temperature logged at rest
+  - limits identifiability of all models
+- **Field studies so far** = diagnostics, not prognosis (p. 10)
+  - 700 B/HEVs Shanghai; 8,032 EVs Beijing (Table 1)
+  - 18 EVs Foshan; 16 EVs Beijing (Table 1)
+  - no data/code shared → not reproducible (p. 11)
+
+## 🧰 Approaches
+- **Empirical aging maps** (p. 5–6)
+  - capacity fade ~ √time + Arrhenius in T
+  - simple, common in industry
+  - ✗ huge data; ✗ cell-to-cell; ✗ misses knees
+  - ✗ separate cycle vs calendar maps
+- **Data-driven ML** (p. 6–7)
+  - raw signals: one cycle life = one data point/cell
+  - features (Severson): simple linear model, accurate (p. 6)
+  - ✗ path-dependence breaks extrapolation (p. 7)
+  - field-friendly: 10 s CC data, partial SOC, charge phase (p. 11)
+  - features must not depend on C-rate/T/SOC (p. 11)
+- **Physics-based** (p. 7–8)
+  - ECMs (lumped) + porous-electrode models
+  - gives predicted cause of failure (p. 7)
+  - ✗ hard to parametrize; ✗ inflexible
+  - lifetime sim ~15 min vs µs for empirical map (p. 8)
+  - degradation modes (LLI/LAM) via DVA (p. 8)
+- **Hybrid (their pick)** (p. 11–12)
+  - physics + ML: PINNs, neural/universal ODEs
+  - extrapolates beyond training data better (p. 12)
+  - examples: Bills et al., Tait et al. (p. 12)
+  - still early; needs open field data (p. 12)
+- **Cross-cutting** (p. 13–14)
+  - Bayesian uncertainty → realistic confidence bounds (p. 14)
+  - ensembles can beat best single model (p. 16)
+
+## ♻️ Second life
+- **Two issues** (p. 15)
+  - first-life history missing or unreliable (secrecy)
+  - second-life use differs (lower SOC window, C-rate)
+- **Same SOH ≠ same future** (p. 15)
+  - past knee → fade won't slow, even with gentler use
+  - detecting knee without history = open problem
+- **Repurposing tests** (p. 15)
+  - slow deep discharge → capacity
+  - pulse test → resistance
+  - EIS → model parameters (electrode ambiguity)
+  - DVA modes correlate with knee
+  - all cell-level; pack level open
+- **Cost vs accuracy** (p. 16)
+  - go/no-go → low accuracy OK
+  - best SOC window/C-rate → more accuracy, longer
+  - pack-to-module balancing → very accurate
+  - rule: test cost ≤ extra revenue
+- **Don't open packs** (p. 16)
+  - labor > benefit of cell screening
+  - use per-brick voltages instead (if recorded)
+
+## 💡 Recommendations
+- **Six research needs** (p. 17)
+  - open lab+field databases, common metadata standards
+  - fast physics models (e.g. PyBaMM)
+  - scalable hybrid physics+ML algorithms
+  - knee diagnosis without history → second life
+  - value of better SOH; data privacy solutions
+- **Data management** (p. 13–14)
+  - ~100 MB time series per cell lifetime (p. 13)
+  - upload features/parameters: bytes vs kB/cycle (Table 2)
+  - manufacturing metadata as important as time series
+  - store max/min/avg brick voltages + module data (p. 14)
+- **Start collecting field data** (p. 17)
+  - taxis, buses, company fleets; charging data
+  - teardown interesting EOL cells to verify models
+- **⚠️ Limits of this paper**
+  - perspective: no new data or benchmark
+  - hybrid "promising" but few field results yet (p. 12)
+  - no SOH standards or test protocols specified
+
+## 🧭 Read together
+- 1 · Fig. 2 four approaches (p. 5)
+- 2 · Fig. 3 field-data challenges + Table 1 (p. 9–10)
+- 3 · Table 2 what to upload (p. 13)
+- 4 · Fig. 4 uncertainty propagation (p. 14)
+- 5 · Second-life section + six needs (p. 15–17)
+</script>
+</div>
+<div id="hint">click a node to fold/unfold · scroll to zoom · drag to pan</div>
+</body>
+</html>

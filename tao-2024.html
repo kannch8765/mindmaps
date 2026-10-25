@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tao et al. (2024) — Generative SOH estimation at random retirement SOC (private)</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #fffdf8; font-family: system-ui, sans-serif; }
+  .markmap { width: 100%; height: 100vh; }
+  .markmap > svg { width: 100%; height: 100%; }
+  #hint { position: fixed; bottom: 10px; right: 14px; color: #999; font-size: 12px; }
+</style>
+<script>window.markmap = { autoLoader: { toolbar: true } };</script>
+<script src="https://cdn.jsdelivr.net/npm/markmap-autoloader@0.18"></script>
+</head>
+<body>
+<div class="markmap">
+<script type="text/template">
+---
+markmap:
+  colorFreezeLevel: 2
+  initialExpandLevel: 2
+  maxWidth: 260
+---
+
+# ❓ Can we get retired-battery SOH at random arrival SOC, without re-charging?<br>Tao et al. 2024
+
+## 🧩 Problem
+- **Retired batteries arrive at random SOC**
+  - discharged for safe storage → SOC usually < 50% (p. 5, p. 11)
+  - pulse response shifts strongly with SOC (p. 4, p. 10)
+  - SOC is continuous → can't test every level (p. 5)
+- **No history after retirement**
+  - pack leaves BMS / cloud monitoring (p. 2)
+  - passports only cover the service phase (p. 2)
+  - → SOH must come from field tests only (p. 2)
+- **Existing tests too slow or too narrow**
+  - CCCV capacity test: long time, extra electricity (p. 2)
+  - HPPC: full sequence > 12 h (p. 2)
+  - authors' earlier pulse+ML: assumed conditioning to 5% SOC (p. 2)
+  - pulse+ML breaks under unseen SOC = domain shift (p. 2)
+- **Why SOH matters for recycling**
+  - direct recycling: SOH sets Li / reagent dosage (p. 2)
+  - wrong dose → incomplete repair or residual alkali (p. 2)
+- **Idea: generate pulse data at unseen SOC, don't measure it** (p. 2)
+
+## 📦 Data
+- **2700 samples = 270 retired batteries × 10 SOC levels** (p. 2)
+  - SOC 5–50% in 5% steps (p. 2)
+  - data + code open on Zenodo (p. 12)
+- **Heterogeneity**
+  - chemistry: 119 NMC · 56 LFP · 95 LMO (p. 2)
+  - formats: cylindrical · pouch · prismatic (p. 2)
+  - capacities: 2.1 · 10 · 21 · 35 Ah (p. 10)
+  - usage: 1 lab-accelerated, 1 pure EV, 2 hybrid EV (p. 2)
+  - real driving profiles unknown (privacy) (p. 4)
+- **Label: SOH from CCCV capacity test** (p. 2–3)
+  - SOH spread 0.6–1, incl. early retirements (p. 4)
+- **Pulse test protocol**
+  - pulses ~5 s; width sensitivity 30 ms–5 s (p. 3)
+  - 25 s rest between pulses; 100 Hz logging (p. 4)
+  - 25 °C controlled; same C-rate for all chemistries (p. 4)
+- **Features: 21 voltage "turning points" U1–U21** (p. 3–4)
+  - zero 2nd-derivative points of first 5 pulses (p. 3)
+
+## ⚙️ Method
+- **Step 1: measure pulses at a few SOCs** (p. 3, Fig. 1)
+- **Step 2: attentional VAE generates features** (p. 10–11)
+  - input: 21-dim pulse features x (p. 10)
+  - condition: [SOC, SOH] (p. 10)
+  - output: 21 features at a new (SOC, SOH) (p. 11)
+  - cross-attention links features ↔ condition, 64-dim (p. 10–11)
+  - latent space only 2-dim, Gaussian (p. 11)
+- **Extrapolation trick: latent scaling** (p. 11)
+  - interpolation: no scaling (identity) (p. 11)
+  - extrapolation: scale by train/test SOC mean & variance ratio (p. 11)
+  - prior knowledge: arrival SOC < 50% (p. 11)
+- **Step 3: random forest SOH regressor on generated data** (p. 12)
+  - 20 trees, max depth 64, sklearn (p. 12)
+  - deploy: pulse at arrival SOC, no conditioning (p. 3)
+- **Training details**
+  - loss = 0.5 MSE + 0.5 KL (p. 11–12)
+  - converges in < 50 iterations (p. 5)
+  - metric: MAPE (p. 12)
+
+## 📊 Results
+- **8 generation cases** (p. 5)
+  - Case0–3 interpolation: train at 5% and 50% bounds (p. 5)
+  - Case4–7 extrapolation: target SOCs outside training (p. 5)
+  - Case4–5 = toys: training cost > savings (p. 5)
+  - Case3: measure 5/25/50% → generate 7 other SOCs (p. 5)
+- **Feature generation quality**
+  - reconstruction MAPE < 1%, all 21 features (p. 5)
+  - unseen-SOC interpolation: MAPE < 2% (p. 5)
+  - low SOC noisier → mid-SOC pulses recommended (p. 5)
+  - no latent scaling → error grows with SOC distance (p. 5)
+- **SOH estimation (NMC 2.1 Ah shown)** (p. 7–8)
+  - all cases: MAPE 4.9% (SD 2.9) (p. 7)
+  - interpolation 4.4% vs extrapolation 6.0% (p. 7)
+  - bias: over-estimates at high SOC, under at low (p. 7)
+- **With vs without generation** (p. 7)
+  - interpolation gaps: 17.3% → 5.4% MAPE (p. 7)
+  - only 5–10% SOC data: 23.8% → 6.0% MAPE (p. 7)
+  - other chemistries/formats also improve (Supp. Fig. 18) (p. 7)
+- **💰 Economics & CO₂**
+  - CO₂ kg/t NMC, CCCV→gen: pyro 1104→753 · hydro 729→379 · direct 579→228 (p. 7)
+  - direct recycling electricity: 80 → 36 USD/t (p. 10)
+  - beats 5%-SOC pulse test above 5.33 t scale (p. 7)
+  - 2030 global: 4.9 bn USD + 35.8 bn kg CO₂ saved vs CCCV (p. 10)
+  - assumes 80% SOH, 50% SOC, uniform deployment (p. 1, p. 7)
+
+## ⚠️ Limits
+- **Narrow test conditions**
+  - SOC only 5–50% (p. 5)
+  - 25 °C lab only, no hot/humid test (p. 4)
+  - main figures = NMC 2.1 Ah, lab-aged (p. 6, p. 8)
+  - cells only; no module/pack tests in main text (our read)
+- **SOH = capacity only (CCCV label)** (p. 2–3)
+  - no power/resistance SOH, no mode diagnosis (our read)
+- **Generator conditions on SOH** (p. 10)
+  - synthetic samples get chosen SOH labels (our read)
+  - Gaussian latent → SOC-dependent SOH bias (p. 7)
+- **Extrapolation weaker: 6.0% vs 4.4% MAPE** (p. 7)
+  - Case4–5 not cost-effective (p. 5)
+- **Economics = scenario model** (p. 1, p. 7)
+  - LMO excluded (data shortage) (p. 7)
+  - tied to 80% SOH / 50% SOC assumptions (p. 7, p. 9)
+
+## 🧭 Read together
+- **1 · Fig. 1: pipeline, conditioning vs generation** (p. 3)
+  - then Methods, Eqs. 3–13 (p. 10–11)
+- **2 · Fig. 2b + 2d: 21 pulse features; U1 shifts with SOC** (p. 4)
+- **3 · Fig. 3c–d: 8 SOC cases, generation error** (p. 6)
+- **4 · Fig. 4a, c, d: SOH with vs without generation** (p. 8)
+- **5 · Fig. 5b–f: CO₂ and cost by recycling route** (p. 9)
+</script>
+</div>
+<div id="hint">click a node to fold/unfold · scroll to zoom · drag to pan</div>
+</body>
+</html>

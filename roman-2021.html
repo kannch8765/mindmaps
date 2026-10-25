@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Roman et al. (2021) — SoH ML pipeline mind map</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #fffdf8; font-family: system-ui, sans-serif; }
+  .markmap { width: 100%; height: 100vh; }
+  .markmap > svg { width: 100%; height: 100%; }
+  #hint { position: fixed; bottom: 10px; right: 14px; color: #999; font-size: 12px; }
+</style>
+<script>window.markmap = { autoLoader: { toolbar: true } };</script>
+<script src="https://cdn.jsdelivr.net/npm/markmap-autoloader@0.18"></script>
+</head>
+<body>
+<div class="markmap">
+<script type="text/template">
+---
+markmap:
+  colorFreezeLevel: 2
+  initialExpandLevel: 2
+  maxWidth: 260
+---
+
+# ❓ Can a short charge-curve segment give SoH<br>with a trustworthy confidence interval?<br>Roman et al. 2021
+
+## 🧩 Problem
+- **Task**: SoH as supervised regression of capacity fade (p. 3)
+- **SoH definition**: SoH = Cᵢ / C₁ (p. 5)
+  - C₁ = first-cycle capacity, full charge–discharge (p. 5)
+  - capacity is the target, not impedance (p. 2)
+- **Older routes & weak spots**
+  - Electrochemical: needs cell specs, heavy PDEs (p. 2)
+  - ECM: limited accuracy; needs pulse / EIS tests (p. 2)
+  - IC/DV curves: amplify noise; need 1/5–1/25 C (p. 2)
+  - GPR / RVM: slow training, poor scaling (p. 2)
+- **Gap**: little or no uncertainty in prior work (p. 2)
+  - SVR fast, but no uncertainty (p. 2)
+  - SoH without uncertainty → no basis for decisions (p. 2)
+- **Answer**: BHUMP = Battery Health & Uncertainty Mgmt Pipeline (p. 2)
+
+## 📦 Data
+- **179 cells, public lab ageing datasets** (p. 7)
+  - CALCE, NASA, TRI, Oxford (p. 12)
+  - 3 designs: prismatic, pouch, cylindrical (p. 3)
+  - 2 chemistries: LiCoO₂, LiFePO₄ (p. 3)
+- **Group I · CC-CV charge · 47 cells** (p. 7)
+  - CALCE CS2 / CX2 / PL + NASA 5 / NASA 11 (p. 7)
+  - NASA 11: random discharge loads (p. 27)
+  - split 23 train / 5 calib / 19 test (p. 27)
+- **Group II · 2-step fast charge · 124 cells** (p. 9)
+  - TRI, A123 LFP cells, 72 charge policies (p. 27)
+  - all discharged at 4C (p. 9)
+  - split 63 train / 10 calib / 51 test (p. 28)
+- **Group III · CC + ARTEMIS drive cycle · 8 cells** (p. 9)
+  - Oxford, Kokam 740 mAh (p. 9)
+  - SoH from slow characterisation cycles every 100 cycles (p. 9)
+  - split 3 train / 1 calib / 4 test (p. 28)
+- **Cleaning**: RANSAC drops training outliers; test kept raw (p. 25)
+
+## ⚙️ Method
+- **Two stages** (p. 3)
+  - Stage 1 offline: features, augment, select, train, calibrate (p. 3)
+  - Stage 2 online: cell of unknown capacity → μ ± σ (p. 3)
+  - flowchart: Fig 6 (p. 18)
+- **Features: 30 from charge-curve segments** (p. 3)
+  - CC voltage segment: Vₗ = Vₕ − 0.3 V → cut-off (p. 19)
+  - CV current segment: Iₕ → 40% current drop (p. 4)
+  - segment stats: time, energy, slope, skewness, kurtosis, entropy (p. 21)
+  - shape vs straight line: Hausdorff, Fréchet distance (p. 21)
+  - history: cumulative Ah / Wh, lagged cycle time, lagged pseudo-resistance (p. 21)
+- **Selection + augmentation**
+  - RF-RFE-CV, 700 trees, picks subset automatically (p. 4)
+  - kept: 18 of 30 (I), 5 of 30 (II), 5 of 18 (III) (p. 7, p. 9, p. 10)
+  - FGSM adversarial examples, step = 1% of feature range (p. 5)
+  - aim: robustness to design/chemistry gaps, narrower CI (p. 3, p. 5)
+- **Four models** (p. 3)
+  - Bayesian: BRR, GPR with RBF kernel (p. 5)
+  - RF, 1500 trees + Infinitesimal Jackknife CI (p. 5)
+  - dNNe: deep ensemble, outputs mean + variance (p. 5–6)
+  - tuning: random search; CV with one cell per fold (p. 3)
+- **Uncertainty & metrics**
+  - error: MAPE, RMSPE (p. 6)
+  - calibration: reliability curve → isotonic recalibration (p. 6)
+    - Cscore: observed coverage of the 90% CI (p. 6)
+    - Sh (sharpness): mean predicted σ (p. 6)
+  - α-accuracy: % predictions within ±1.5% (p. 6)
+  - β: share of predicted PDF inside α band, ideal 1 (p. 6)
+  - PEP: % under-estimates = conservative bias (p. 6)
+
+## 📊 Results
+- **Group I (CC-CV), averages** (p. 9)
+  - RF lowest error: MAPE 2.17%, RMSPE 2.70% (p. 9)
+  - but RF Cscore 54.70 → poorly calibrated (p. 9)
+  - dNNe Cscore 86.28, costs +1.13 MAPE, +1.56 RMSPE (p. 9)
+  - ⚠️ BRR Cscore 89.16 is actually nearest 90 (p. 9)
+- **Group II (fast charge), averages** (p. 9)
+  - RF: RMSPE 0.14%, Cscore 79.72 → over-confident (p. 9)
+  - dNNe: RMSPE 0.45%, Cscore 91.02 (p. 9)
+  - all four models RMSPE < 2% (p. 9)
+- **Group III (drive cycle), averages** (p. 11)
+  - BRR best error: RMSPE 0.32%, but Cscore 68.11 (p. 11)
+  - dNNe: RMSPE 0.39%, Cscore 91.17 (p. 11)
+  - small low-variance data → linear model wins (p. 10)
+- **Main message** (p. 12)
+  - most accurate model depends on charge protocol (p. 12)
+  - RF hard to calibrate, over-optimistic (p. 12)
+  - dNNe: 2nd-lowest error, generally better calibrated (p. 12)
+  - low error ≠ deployable; run uncertainty checks first (p. 12)
+- **Practical claims**
+  - SoH in under 15 min from a charge segment (p. 3, p. 19)
+  - copes with partial discharge (p. 19)
+  - claims no need for chemistry / design / temperature info (p. 12)
+
+## ⚠️ Limits
+- **Scope**
+  - single lab cells only; no modules or packs (p. 7)
+  - separate model + feature set per charge-protocol group (p. 7)
+  - only LiCoO₂ and LiFePO₄ (p. 3)
+- **Temperature not modelled** (p. 12)
+  - temperature shifts charge curves → extra uncertainty (p. 12)
+  - suggested fix: temperature as an input (p. 12)
+- **Needs a clean charge segment**
+  - CC part up to cut-off, plus CV tail (p. 4, p. 19)
+  - Group III used slow C/18.5 characterisation cycles (p. 27)
+- **Evaluation gaps**
+  - Group III: only 4 test cells (p. 28)
+  - effect of augmentation not tested (p. 5)
+  - GPR kernel choice not explored (p. 5)
+- **Reporting quirks**
+  - p. 7 text swaps Group II/III protocols vs Table 1 (p. 7)
+  - β is a fraction in Group I, a % in II/III (p. 7, p. 9)
+  - headline 0.45% RMSPE = dNNe; RF reached 0.14% (p. 1, p. 9)
+
+## 🧭 Read together
+- **1.** Fig 6 flowchart + Sec 2.1 overview (p. 18, p. 3)
+- **2.** Fig 1 charge segments + Supp Note 2 thresholds (p. 4, p. 19)
+- **3.** Table 1 datasets + Supp Note 5 splits (p. 7, p. 27–28)
+- **4.** Fig 2 α-β zone + calibration eqs 9–11 (p. 7, p. 6)
+- **5.** Tables 3, 5, 7 averages + Fig 3 example (p. 9, p. 11, p. 8)
+</script>
+</div>
+<div id="hint">click a node to fold/unfold · scroll to zoom · drag to pan</div>
+</body>
+</html>

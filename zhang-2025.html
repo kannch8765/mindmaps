@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Zhang et al. (2025) — Retired-battery diagnostics review: overlap check</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #fffdf8; font-family: system-ui, sans-serif; }
+  .markmap { width: 100%; height: 100vh; }
+  .markmap > svg { width: 100%; height: 100%; }
+  #hint { position: fixed; bottom: 10px; right: 14px; color: #999; font-size: 12px; }
+</style>
+<script>window.markmap = { autoLoader: { toolbar: true } };</script>
+<script src="https://cdn.jsdelivr.net/npm/markmap-autoloader@0.18"></script>
+</head>
+<body>
+<div class="markmap">
+<script type="text/template">
+---
+markmap:
+  colorFreezeLevel: 2
+  initialExpandLevel: 2
+  maxWidth: 260
+---
+
+# ❓ What does this review cover — and what gaps does it admit?<br>Zhang et al. 2025
+
+## 🗂️ What it covers (section map)
+- **Who**: Swinburne + PolyU; arXiv preprint, 46 pp. (p. 1)
+- **§2 Challenges**: uncertain health, no standard protocols, safety (pp. 5–6)
+- **§3 Health assessment** (pp. 6–22)
+  - screening → HIs → diagnostic tests → grading
+- **§4 ML under data scarcity** (pp. 22–34)
+  - synthetic data: physics / data-driven / hybrid (pp. 24–27)
+  - supervised, semi-, weakly-, unsupervised (pp. 27–31)
+  - ~13 of ~33 text pages; abstract leans ML (p. 3)
+- **Scope**: cell-level, generic; no country/region focus (keyword search)
+
+## 🧪 Methods & health indicators
+- **Electrochemical HIs**: capacity, voltage shape, IC/DV, OCV, CE (p. 9)
+  - only SOH formula: SOH_Q = Q_measured / Q_rated (p. 9)
+- **Impedance HIs**: DCIR, EIS, DRT, diffusion (pp. 12–15)
+  - DCIR depends on SOC & temperature; needs standard conditions (p. 13)
+- **Thermal / safety HIs**: ΔT, hot spots, gas, onset T (pp. 15–17)
+  - safety precursors = decisive exclusion criteria (p. 17)
+- **Table 1**: HI classes × meaning × requirements × pros/cons (p. 17)
+- **Time vs accuracy (qualitative only)**
+  - full discharge: hours; pulse/IR: thousands per shift (p. 7)
+  - partial charge (LFP): >50% less test time (p. 7)
+  - pulse harmonics + ML: sub-% SOH error in minutes (p. 19)
+  - simplified EIS: <2% error, much shorter test (p. 20)
+  - multi-frequency platforms: ~1 s per cell (p. 22)
+
+## 🪜 Screening workflow / tiers
+- **Top-down industrial flow** (p. 7)
+  - pack: total voltage, insulation, temperature gradients
+  - module: wiring, corrosion, parallel-string mismatch
+  - cell: capacity, impedance, mechanics (safe modules only)
+- **Cell level: rapid exclusion → detail** (p. 7)
+  - visual: swelling, leakage, casing damage
+  - basic electrical: OCV, DCIR, short pulses
+  - advanced, subset only: EIS, IC, DV, HPPC
+- **Three tiers** (pp. 7–8)
+  - >80%: demanding reuse (mobility, power tools)
+  - 50–80%: stationary storage, backup
+  - <50% / abnormal R / defects → recycling
+  - cutoffs vary by jurisdiction; EOL 80% vs 70% (p. 8)
+- **Grading logic** (pp. 21–22)
+  - fixed thresholds vs composite scores (p. 21)
+  - stationary → capacity; mobility → DCIR / power (p. 21)
+  - "grading is a routing decision" (p. 22)
+- ✅ Our abstract-only note is accurate (pp. 6–8)
+
+## 🕳️ Gaps it admits
+- **No harmonised protocols**: C-rate, cutoffs, rest, ambient (pp. 5–6)
+- **Needs unified reporting standards + shared datasets** (p. 8)
+  - passport championed for traceability and grading (p. 8)
+- **Rapid tests sensitive to T, SOC, procedure** (pp. 7–8)
+- **Cross-facility calibration of grading needed** (p. 22)
+- **Future work (§4.5)** (p. 34)
+  - "measure minimally, infer maximally" pipelines
+  - physics-constrained generative models
+  - cross-chemistry generalisation
+  - calibrated uncertainty for sorting thresholds
+  - retired-battery benchmarks and shared protocols
+
+## 🧭 Read together
+- **pp. 7–8**: screening flow, three tiers, passport sentence
+- **p. 17 Table 1**: HI classes compared
+- **pp. 21–22 §3.3.3**: thresholds → routing → calibration
+- **p. 33 Table 2**: ML routes star ratings (optional)
+</script>
+</div>
+<div id="hint">click a node to fold/unfold · scroll to zoom · drag to pan</div>
+</body>
+</html>

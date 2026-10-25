@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Battery ageing map · Edge 2021 × Attia 2022</title>
+<link rel="stylesheet" href="https://esm.sh/@xyflow/react@12.3.6/dist/style.css">
+<script type="importmap">
+{ "imports": {
+  "react": "https://esm.sh/react@18.3.1",
+  "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
+  "react-dom": "https://esm.sh/react-dom@18.3.1?external=react",
+  "react-dom/client": "https://esm.sh/react-dom@18.3.1/client?external=react",
+  "@xyflow/react": "https://esm.sh/@xyflow/react@12.3.6?external=react,react-dom",
+  "htm": "https://esm.sh/htm@3.1.1"
+} }
+</script>
+<style>
+  :root {
+    --bg:#f6f5f2; --panel:#ffffff; --ink:#1f2328; --mute:#7a7f87; --line:#e7e4de; --soft:#f3f1ec;
+    --mech:#d9485f; --sec:#e8833a; --mode:#3e7cb1; --path:#7a5cc2; --eff:#2f8f5b; --neg:#2b8a8a;
+  }
+  * { box-sizing:border-box; }
+  html, body, #root { margin:0; height:100%; }
+  body { background:var(--bg); color:var(--ink);
+         font:13px/1.45 Inter, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  .app { display:flex; height:100vh; padding:14px; gap:0; }
+  .shell { flex:1; display:flex; background:var(--panel); border-radius:22px; overflow:hidden;
+           box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 30px rgba(0,0,0,.06); }
+
+  /* left sidebar */
+  .side { width:268px; border-right:1px solid var(--line); padding:16px 14px; overflow:auto; flex-shrink:0; }
+  .brand { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .logo { width:34px; height:34px; border-radius:10px; background:#1f2328; color:#fff; display:grid;
+          place-items:center; font-size:17px; }
+  .brand b { display:block; font-size:14px; }
+  .brand span { color:var(--mute); font-size:11.5px; }
+  .search { width:100%; border:1px solid var(--line); border-radius:10px; padding:8px 10px 8px 30px; font:inherit;
+            background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%237a7f87' stroke-width='2'%3E%3Ccircle cx='6' cy='6' r='4.5'/%3E%3Cpath d='M9.5 9.5 13 13'/%3E%3C/svg%3E") 10px center no-repeat; }
+  .search:focus { outline:2px solid #1f232822; }
+  .focusq { margin:12px 0 4px; padding:10px 12px; border-radius:12px; background:#fff8e6; border:1px solid #f1dfae;
+            font-weight:600; font-size:12.5px; }
+  .sec-h { display:flex; justify-content:space-between; color:var(--mute); font-size:11px; font-weight:600;
+           letter-spacing:.04em; text-transform:uppercase; margin:16px 2px 6px; }
+  .row { display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:10px; cursor:pointer;
+         border:1px solid transparent; user-select:none; }
+  .row:hover { background:var(--soft); }
+  .row.on { border-color:var(--line); background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.05); }
+  .row.off { opacity:.45; }
+  .dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+  .row .cnt { margin-left:auto; color:var(--mute); font-size:11px; }
+  .loop { display:block; }
+  .loop .lt { display:flex; align-items:center; gap:7px; font-weight:600; }
+  .loop .tag { font-size:10.5px; font-weight:700; padding:1px 6px; border-radius:6px; color:#fff; }
+  .loop .ls { color:var(--mute); font-size:11.5px; margin:2px 0 0 0; }
+  .pill { display:inline-flex; gap:6px; }
+  .pbtn { border:1px solid var(--line); background:#fff; border-radius:999px; padding:4px 10px; font:inherit;
+          font-size:12px; cursor:pointer; }
+  .pbtn.on { background:#1f2328; color:#fff; border-color:#1f2328; }
+
+  /* canvas */
+  .canvas { flex:1; position:relative; min-width:0; background:#fbfaf8; }
+  .topbar { position:absolute; z-index:5; top:12px; left:12px; right:12px; display:flex; gap:8px; align-items:center;
+            pointer-events:none; }
+  .chip { pointer-events:auto; background:#fff; border:1px solid var(--line); border-radius:999px; padding:5px 11px;
+          font-size:12px; color:var(--mute); box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  .chip b { color:var(--ink); font-weight:600; }
+  .btn { pointer-events:auto; margin-left:auto; background:#1f2328; color:#fff; border:0; border-radius:10px;
+         padding:7px 12px; font:inherit; font-size:12px; cursor:pointer; }
+  .btn.ghost { margin-left:0; background:#fff; color:var(--ink); border:1px solid var(--line); }
+
+  /* cards */
+  .card { width:232px; background:#fff; border:1px solid var(--line); border-radius:14px; padding:10px 11px 9px;
+          box-shadow:0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.04); transition:opacity .18s, box-shadow .18s;
+          cursor:pointer; }
+  .card:hover { box-shadow:0 2px 4px rgba(0,0,0,.06), 0 8px 22px rgba(0,0,0,.08); }
+  .card.focus { border-color:#1f2328; box-shadow:0 0 0 3px #1f232814, 0 8px 22px rgba(0,0,0,.10); }
+  .card.dim { opacity:.16; }
+  .card.hit { box-shadow:0 0 0 3px #ffd84d88; }
+  .card .hd { display:flex; gap:9px; align-items:flex-start; }
+  .ic { width:30px; height:30px; border-radius:9px; display:grid; place-items:center; font-size:15px; flex-shrink:0; }
+  .ttl { font-weight:650; font-size:13px; line-height:1.25; }
+  .sub { color:var(--mute); font-size:11px; margin-top:1px; }
+  .badge { margin-left:auto; font-size:11px; white-space:nowrap; padding:1px 6px; border-radius:7px;
+           background:var(--soft); color:#444; }
+  .chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:7px; }
+  .c { font-size:10.5px; padding:1px 7px; border-radius:999px; background:var(--soft); color:#555; }
+  .c.warn { background:#fdecef; color:#b23a4c; }
+  .c.ok { background:#e8f5ee; color:#23744a; }
+  .hdr { font-weight:700; font-size:12px; color:var(--ink); background:transparent; width:232px; }
+  .hdr span { display:block; color:var(--mute); font-weight:500; font-size:11px; }
+  .react-flow__handle { opacity:0; width:6px; height:6px; min-width:0; min-height:0; border:0; }
+  .react-flow__edge-textbg { fill:#fbfaf8; }
+  .react-flow__edge-text { font-size:10.5px; fill:#444; }
+  .react-flow__attribution { display:none; }
+
+  /* right panel */
+  .detail { width:322px; border-left:1px solid var(--line); padding:16px; overflow:auto; flex-shrink:0; }
+  .detail h2 { font-size:16px; margin:8px 0 2px; }
+  .detail .kicker { color:var(--mute); font-size:11.5px; }
+  .detail p { margin:8px 0; }
+  .box { border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin:10px 0; }
+  .box h4 { margin:0 0 6px; font-size:11px; color:var(--mute); text-transform:uppercase; letter-spacing:.04em; }
+  .link { display:flex; gap:6px; align-items:baseline; padding:3px 0; cursor:pointer; }
+  .link:hover .ln { text-decoration:underline; }
+  .link .lr { color:var(--mute); font-size:11.5px; }
+  .src { font-size:11.5px; color:#555; }
+  .rq { background:#f4f0ff; border-color:#e2d8fb; }
+  .legend { display:grid; grid-template-columns:22px 1fr; gap:5px 8px; align-items:center; font-size:12px; }
+  .ln-s { height:0; border-top:2px solid #9aa0a6; }
+  .ln-d { height:0; border-top:2px dashed var(--neg); }
+  .ln-l { height:0; border-top:3px solid var(--mech); }
+  .muted { color:var(--mute); font-size:12px; }
+  @media (max-width: 1180px) { .side { width:220px; } .detail { width:260px; } .app { padding:8px; } }
+  @media (max-width: 900px) {
+    .shell { flex-direction:column; } .canvas { min-height:56vh; }
+    .side { width:auto; max-height:24vh; border-right:0; border-bottom:1px solid var(--line); }
+    .detail { width:auto; max-height:30vh; border-left:0; border-top:1px solid var(--line); } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="module">
+import React, { useMemo, useState, useCallback, useEffect } from "react";
+import { createRoot } from "react-dom/client";
+import { ReactFlow, Background, Controls, Handle, Position, MarkerType, useNodesState, useReactFlow,
+         ReactFlowProvider } from "@xyflow/react";
+import htm from "htm";
+const html = htm.bind(React.createElement);
+
+/* ───────── content ─────────
+   Pages: Edge = journal pages (PCCP 23, 8200–8221). Attia = arXiv v1 PDF pages (2201.02891).
+   Knee types (Attia Fig. 6, p. 14): ❄️ snowball · 🙈 hidden · 🚪 threshold. */
+const COLS = [
+  { key:"mech", title:"① Mechanisms", hint:"what happens inside (Edge)", color:"var(--mech)", tint:"#fdecef" },
+  { key:"sec",  title:"② Secondary mechanisms", hint:"knock-on effects (Edge Fig. 9)", color:"var(--sec)", tint:"#fdf0e5" },
+  { key:"mode", title:"③ Degradation modes", hint:"what electrical tests can infer", color:"var(--mode)", tint:"#e8f0f8" },
+  { key:"path", title:"④ Knee pathways", hint:"how fade suddenly speeds up (Attia)", color:"var(--path)", tint:"#f0ebfa" },
+  { key:"eff",  title:"⑤ Effects", hint:"what the user sees", color:"var(--eff)", tint:"#e7f4ec" },
+];
+const X = [0, 330, 660, 990, 1320], Y0 = 70, DY = 128;
+
+const N = [
+  // ① mechanisms
+  { id:"sei", col:0, row:0, icon:"🧪", title:"SEI growth", sub:"Mechanism · negative electrode", papers:["Edge","Attia"],
+    badge:"B1", chips:["🌡️ High T","🔋 High SOC"],
+    note:"The protective film made at formation keeps growing and eats lithium and electrolyte. Growth slows as the film thickens (≈√time), which gives sublinear fade.",
+    src:["Edge p. 8203 (SEI layer growth)","Edge Table 3, p. 8212 (stressors)","Attia p. 4 (sublinear, self-passivating)"] },
+  { id:"plating", col:0, row:1.25, icon:"⚡", title:"Lithium plating", sub:"Mechanism · negative electrode", papers:["Edge","Attia"],
+    chips:["🧊 Low T","⚡ Fast charge","🔋 High SOC"],
+    note:"Lithium deposits ON the graphite instead of going IN. Leaves dead lithium, grows dendrites, and can short the cell.",
+    src:["Edge p. 8203 (Lithium plating)","Attia pp. 13–25 (plating knees, Figs. 7–9)"] },
+  { id:"pestruct", col:0, row:2.75, icon:"🧱", title:"PE structural change", sub:"Mechanism · positive electrode", papers:["Edge"],
+    chips:["🌡️ High T","🔋 High SOC / V"],
+    note:"Layered structure turns spinel/rock-salt, lattice oxygen and gas are released, Ni/Li mix, acid/HF attacks, CEI films form.",
+    src:["Edge pp. 8204–8205"] },
+  { id:"nefrac", col:0, row:4.0, icon:"💥", title:"NE particle fracture", sub:"Mechanism · negative electrode", papers:["Edge","Attia"],
+    chips:["🧊 Low T","⚡ High current","🔁 Cycling"],
+    note:"Swelling and shrinking cracks negative-electrode particles (silicon swells a lot). Cracks expose fresh surface for new SEI.",
+    src:["Edge p. 8205 (Particle fracture)","Attia Fig. 15, p. 41 (mechanical feedback)"] },
+  { id:"pefrac", col:0, row:5.25, icon:"🪨", title:"PE particle fracture", sub:"Mechanism · positive electrode", papers:["Edge"],
+    chips:["⚡ High current","🔁 Cycling"],
+    note:"Uneven lithiation strain cracks positive-electrode particles; pieces lose contact.",
+    src:["Edge p. 8205 (Particle fracture)"] },
+
+  // ② secondary
+  { id:"pore", col:1, row:0.6, icon:"🕳️", title:"Pore clogging", sub:"Secondary · negative electrode", papers:["Edge","Attia"],
+    note:"SEI and transition-metal deposits block electrode pores, so local current rises and plating becomes likely.",
+    src:["Edge p. 8207 (pore blockage)","Attia Fig. 9, p. 25 (pore clogging → plating)"] },
+  { id:"tm", col:1, row:2.1, icon:"🧲", title:"TM dissolution & cross-over", sub:"Secondary · PE → NE", papers:["Edge"],
+    note:"Ni / Mn / Co leave the positive electrode, travel to the negative electrode and deposit there, speeding up SEI growth.",
+    src:["Edge pp. 8204, 8207"] },
+  { id:"dry", col:1, row:3.6, icon:"🏜️", title:"Electrolyte dry-out", sub:"Secondary · whole cell", papers:["Edge","Attia"],
+    note:"Side reactions (and gas) use up electrolyte. Parts of the electrode lose contact with it.",
+    src:["Edge Fig. 9, p. 8208","Attia p. 34"] },
+
+  // ③ modes
+  { id:"lli", col:2, row:0, icon:"🪙", title:"LLI · lost lithium", sub:"Mode", papers:["Edge","Attia"],
+    chips:["🔬 ICA / DVA","🔬 HP coulometry"], detect:true,
+    note:"Fewer lithium 'tokens' left to shuttle between electrodes.",
+    src:["Edge pp. 8201–8202 (nomenclature)","Edge p. 8209 (ICA/DVA)"] },
+  { id:"drift", col:2, row:1.2, icon:"↔️", title:"Stoichiometric drift", sub:"Mode", papers:["Edge"],
+    chips:["🔬 ICA / DVA"],
+    note:"The two electrodes' usable windows slide out of line. Can push the positive electrode to high potential.",
+    src:["Edge pp. 8201–8202"] },
+  { id:"lamne", col:2, row:2.4, icon:"🧩", title:"LAM-NE", sub:"Mode · lost NE storage sites", papers:["Edge","Attia"],
+    chips:["🔬 ICA / DVA"],
+    note:"Storage sites lost in the negative electrode. Often hidden at first, because the NE is oversized.",
+    src:["Edge pp. 8201–8202","Attia p. 26 (hidden until limiting)"] },
+  { id:"lampe", col:2, row:3.6, icon:"🧩", title:"LAM-PE", sub:"Mode · lost PE storage sites", papers:["Edge","Attia"],
+    chips:["🔬 ICA / DVA"],
+    note:"Storage sites lost in the positive electrode.",
+    src:["Edge pp. 8201–8202"] },
+  { id:"imp", col:2, row:4.8, icon:"🚧", title:"Impedance ↑", sub:"Mode · resistance growth", papers:["Edge","Attia"],
+    chips:["🔬 EIS","🔬 Pulse / DCIR"],
+    note:"Ohmic resistance up and slower kinetics. Fast to measure with a pulse test.",
+    src:["Edge pp. 8208–8211 (diagnostics)","Attia p. 30"] },
+
+  // ④ knee pathways (Attia)
+  { id:"kplat", col:3, row:0, icon:"⚡", title:"Plating knee", sub:"Knee pathway", papers:["Attia"],
+    badge:"❄️🙈🚪", chips:["✓ electrically visible"], vis:true,
+    note:"Three routes: fresh-cell plating, rate-independent plating once the NE has too few sites, and rate-dependent plating from clogged pores. Plating can also snowball through its own nucleation and growth.",
+    src:["Attia pp. 13–25 (Figs. 7–9)","Attia p. 46 (snowball kinetics)"] },
+  { id:"ksat", col:3, row:1.1, icon:"🫙", title:"Electrode saturation", sub:"Knee pathway", papers:["Attia"],
+    badge:"🙈🚪", chips:["✓ electrically visible"], vis:true,
+    note:"A race: if one electrode loses sites faster than lithium is lost, it saturates and hits the cutoff early. Hidden until that electrode becomes limiting.",
+    src:["Attia pp. 26–29 (Figs. 10–11)"] },
+  { id:"kres", col:3, row:2.2, icon:"🚧", title:"Resistance growth", sub:"Knee pathway", papers:["Attia"],
+    badge:"🚪", chips:["✓ electrically visible"], vis:true,
+    note:"Rising resistance makes the cell hit its voltage cutoff sooner. Once discharge ends on the flat part of the curve, a little more resistance costs a lot of capacity: a rate-dependent 'pseudo-knee'.",
+    src:["Attia pp. 30–33 (Fig. 12)"] },
+  { id:"kdep", col:3, row:3.3, icon:"🧴", title:"Electrolyte / additive depletion", sub:"Knee pathway", papers:["Attia"],
+    badge:"🚪", chips:["✗ hard to detect"], vis:false,
+    note:"When electrolyte or a protective additive (e.g. FEC in silicon-rich cells) runs out, fade accelerates. The remaining amount is not visible in routine electrical tests.",
+    src:["Attia pp. 34–37 (Fig. 13)","Attia p. 62 (hard to detect)"] },
+  { id:"kperc", col:3, row:4.4, icon:"🕸️", title:"Percolation-limited connectivity", sub:"Knee pathway · largely hypothesised", papers:["Attia"],
+    badge:"🚪", chips:["✗ hard to detect"], vis:false,
+    note:"Once the electrolyte or conductive network drops below a critical fraction, connectivity collapses suddenly. Still mostly a hypothesis: don't cite as established.",
+    src:["Attia pp. 38–40 (Fig. 14)","Attia p. 10 (mostly hypotheses)"] },
+  { id:"kmech", col:3, row:5.5, icon:"🌀", title:"Mechanical deformation", sub:"Knee pathway", papers:["Attia"],
+    badge:"❄️🚪", chips:["✗ hard to detect (microscale)"], vis:false,
+    note:"Particle-scale cracking and cell-scale deformation (e.g. jelly-roll core in wound cells) feed each other.",
+    src:["Attia pp. 39–44 (Fig. 15)","Attia p. 51 (form factor)"] },
+
+  // ⑤ effects
+  { id:"cap", col:4, row:0.5, icon:"🔋", title:"Capacity fade", sub:"Effect · less Ah", papers:["Edge","Attia"],
+    chips:["🔬 Capacity test"],
+    note:"What users see first. Many mechanisms map to it (many-to-many), so capacity alone can't tell the cause.",
+    src:["Edge pp. 8201–8202","Attia p. 5 (axis conventions)"] },
+  { id:"knee", col:4, row:2.0, icon:"📈", title:"Knee: fade speeds up", sub:"Effect", papers:["Edge","Attia"],
+    note:"Ageing suddenly accelerates. No single cause; the order of events matters (path dependence).",
+    src:["Edge p. 8200 (path dependence)","Attia pp. 3–5, 56"] },
+  { id:"elbow", col:4, row:3.2, icon:"📐", title:"Resistance elbow", sub:"Effect · fast resistance rise", papers:["Attia"],
+    chips:["🔬 Pulse / DCIR"],
+    note:"In every study collected, capacity knees came with resistance elbows. The elbow usually comes with or after the knee.",
+    src:["Attia pp. 60–61 (Table AII)"] },
+  { id:"power", col:4, row:4.4, icon:"🐢", title:"Power fade", sub:"Effect", papers:["Edge"],
+    chips:["🔬 Pulse / HPPC"],
+    note:"Higher impedance limits how fast energy can come out.",
+    src:["Edge pp. 8201–8202"] },
+  { id:"safety", col:4, row:5.5, icon:"⚠️", title:"Safety risk", sub:"Effect", papers:["Edge"],
+    note:"Dendrites from plating can pierce the separator and short the cell.",
+    src:["Edge p. 8203"] },
+];
+
+// [source, target, label, kind ("n" | "neg"), loop]
+const E = [
+  ["sei","lli","consumes Li","n","R3"], ["sei","imp","thicker film","n"], ["sei","dry","consumes electrolyte","n"],
+  ["sei","pore","films clog pores","n","R1"], ["sei","kdep","uses up additive (e.g. FEC)","n"],
+  ["plating","lli","dead Li","n"], ["plating","imp","","n"], ["plating","sei","fresh Li → more SEI","n","R1"],
+  ["plating","safety","dendrites","n"], ["plating","kplat","can snowball","n"],
+  ["pestruct","lampe","","n"], ["pestruct","imp","","n"], ["pestruct","tm","releases TM","n","R3"],
+  ["nefrac","sei","fresh surface","n"], ["nefrac","lamne","isolated particles","n","R2"], ["nefrac","imp","","n"],
+  ["nefrac","kmech","particle scale","n"],
+  ["pefrac","lampe","","n"], ["pefrac","imp","","n"], ["pefrac","kmech","particle scale","n"],
+  ["pore","plating","local overcharge","n","R1"], ["pore","kplat","rate-dependent plating","n"],
+  ["tm","sei","TM deposits on NE","n","R3"],
+  ["dry","imp","","n"], ["dry","kdep","","n"], ["dry","kperc","electrolyte network breaks","n"],
+  ["dry","lamne","particles lose electrolyte","n","R4"],
+  ["lli","drift","","n","R3"], ["drift","pestruct","PE pushed to high potential","n","R3"],
+  ["lli","plating","less Li → less plating","neg","B2"],
+  ["lamne","nefrac","higher local current → more stress","n","R2"],
+  ["lamne","dry","higher local current → faster dry-out","n","R4"],
+  ["lli","cap","","n"], ["lampe","cap","","n"], ["lamne","cap","once limiting","n"],
+  ["lli","ksat","race: LAM vs LLI","n"], ["lamne","ksat","","n"], ["lampe","ksat","","n"],
+  ["lamne","kplat","too few NE sites (n:p)","n"], ["ksat","kplat","NE saturates → plating","n"],
+  ["imp","kres","overpotential → early cutoff","n"], ["imp","power","","n"], ["imp","elbow","","n"],
+  ["kplat","knee","","n"], ["ksat","knee","hidden knee","n"], ["kres","knee","pseudo-knee","n"],
+  ["kdep","knee","","n"], ["kperc","knee","","n"], ["kmech","knee","","n"],
+  ["knee","cap","fade accelerates","n"], ["knee","elbow","elbow follows knee","n"],
+];
+
+const LOOPS = [
+  { id:"R1", kind:"R", color:"#d9485f", name:"Clogged pores → plating", story:"SEI clogs pores → local overcharge → plating → fresh lithium makes more SEI.", src:"Edge p. 8207 · Attia Fig. 9" },
+  { id:"R2", kind:"R", color:"#e8833a", name:"Cracks beget cracks", story:"Cracked particles drop out → remaining ones carry more current → more stress → more cracks.", src:"Attia p. 46, Fig. 15" },
+  { id:"R3", kind:"R", color:"#7a5cc2", name:"Transition-metal shuttle", story:"PE releases TM → TM speeds NE SEI → lithium lost → windows drift → PE pushed higher → more TM.", src:"Edge pp. 8204, 8207" },
+  { id:"R4", kind:"R", color:"#b8860b", name:"Dry-out spiral", story:"Dry patches lose active material → local current rises → electrolyte dries out faster.", src:"Attia p. 34 (Fang et al.)" },
+  { id:"B1", kind:"B", color:"#2b8a8a", name:"Thick skin slows itself", story:"A thicker SEI slows its own growth (≈√time) → sublinear fade. Shown as the B1 badge on SEI.", src:"Attia p. 4" },
+  { id:"B2", kind:"B", color:"#2b8a8a", name:"Less lithium, less plating", story:"Losing lithium can make plating less likely (dashed link).", src:"Edge Fig. 9, p. 8208" },
+];
+const loopOf = Object.fromEntries(LOOPS.map(l => [l.id, l]));
+const byId = Object.fromEntries(N.map(n => [n.id, n]));
+
+/* ───────── nodes / edges ───────── */
+const H = [["l","left",Position.Left],["r","right",Position.Right],["t","top",Position.Top],["b","bottom",Position.Bottom]];
+function Card({ data }) {
+  const n = data.n, col = COLS[n.col];
+  return html`<div className=${"card " + (data.cls || "")}>
+    ${H.map(([k,,p]) => html`<${Handle} key=${k+"s"} id=${k+"s"} type="source" position=${p} />`)}
+    ${H.map(([k,,p]) => html`<${Handle} key=${k+"t"} id=${k+"t"} type="target" position=${p} />`)}
+    <div className="hd">
+      <div className="ic" style=${{ background: col.tint }}>${n.icon}</div>
+      <div style=${{ minWidth:0 }}>
+        <div className="ttl">${n.title}</div>
+        <div className="sub">${n.sub}</div>
+      </div>
+      ${n.badge && html`<div className="badge" title=${n.badge === "B1" ? "Balancing loop B1" : "Knee types: ❄️ snowball · 🙈 hidden · 🚪 threshold"}>${n.badge}</div>`}
+    </div>
+    ${n.chips && html`<div className="chips">${n.chips.map(c => html`<span key=${c}
+        className=${"c" + (c.startsWith("✗") ? " warn" : c.startsWith("✓") ? " ok" : "")}>${c}</span>`)}</div>`}
+  </div>`;
+}
+function Header({ data }) {
+  const c = data.c;
+  return html`<div className="hdr"><span style=${{ color:c.color, display:"inline", fontWeight:700, fontSize:12 }}>●</span> ${c.title}<span>${c.hint}</span></div>`;
+}
+const nodeTypes = { card: Card, header: Header };
+
+function handlesFor(s, t) {
+  const a = byId[s], b = byId[t];
+  if (b.col > a.col) return ["rs", "lt"];
+  if (b.col < a.col) return ["ls", "rt"];
+  return b.row > a.row ? ["bs", "tt"] : ["ts", "bt"];
+}
+const initialNodes = [
+  ...COLS.map((c, i) => ({ id:"h-"+c.key, type:"header", position:{ x:X[i], y:4 }, data:{ c }, draggable:false, selectable:false })),
+  ...N.map(n => ({ id:n.id, type:"card", position:{ x:X[n.col], y:Y0 + n.row * DY }, data:{ n } })),
+];
+
+/* ───────── app ───────── */
+function App() {
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const h0 = decodeURIComponent(location.hash.slice(1));
+  const [sel, setSel] = useState(byId[h0] ? h0 : null);
+  const [loop, setLoop] = useState(LOOPS.some(l => l.id === h0) ? h0 : null);
+  const [hidden, setHidden] = useState({});
+  const [paper, setPaper] = useState("All");
+  const [q, setQ] = useState("");
+  const [showAll, setShowAll] = useState(false);
+  const rf = useReactFlow();
+
+  const visible = useCallback(id => {
+    const n = byId[id]; if (!n) return true;
+    return !hidden[COLS[n.col].key];
+  }, [hidden]);
+
+  const hood = useMemo(() => {
+    if (!sel) return null;
+    const s = new Set([sel]);
+    E.forEach(([a, b]) => { if (a === sel) s.add(b); if (b === sel) s.add(a); });
+    return s;
+  }, [sel]);
+  const loopNodes = useMemo(() => {
+    if (!loop) return null;
+    if (loop === "B1") return new Set(["sei"]);
+    const s = new Set(); E.forEach(([a, b, , , l]) => { if (l === loop) { s.add(a); s.add(b); } }); return s;
+  }, [loop]);
+  const hits = useMemo(() => {
+    const t = q.trim().toLowerCase(); if (!t) return null;
+    return new Set(N.filter(n => (n.title + " " + n.sub + " " + n.note).toLowerCase().includes(t)).map(n => n.id));
+  }, [q]);
+
+  const shownNodes = nodes.map(nd => {
+    if (nd.type === "header") return { ...nd, hidden: !!hidden[nd.data.c.key] };
+    const n = byId[nd.id];
+    let cls = "";
+    if (hood) cls = nd.id === sel ? "focus" : hood.has(nd.id) ? "" : "dim";
+    else if (loopNodes) cls = loopNodes.has(nd.id) ? "" : "dim";
+    else if (hits) cls = hits.has(nd.id) ? "hit" : "dim";
+    else if (paper !== "All" && !n.papers.includes(paper)) cls = "dim";
+    return { ...nd, hidden: !visible(nd.id), data: { ...nd.data, cls } };
+  });
+
+  const edges = E.filter(([a, b]) => visible(a) && visible(b)).map(([a, b, label, kind, l], i) => {
+    const [sh, th] = handlesFor(a, b);
+    const inHood = hood && (a === sel || b === sel);
+    const inLoop = loop && l === loop;
+    const active = inHood || inLoop;
+    const faded = (hood && !inHood) || (loop && !inLoop) || (hits && !(hits.has(a) && hits.has(b)))
+               || (!hood && !loop && !hits && paper !== "All" && !(byId[a].papers.includes(paper) && byId[b].papers.includes(paper)));
+    const color = inLoop ? loopOf[l].color : kind === "neg" ? "#2b8a8a" : active ? "#1f2328" : "#b9bec5";
+    return {
+      id: "e" + i, source: a, target: b, sourceHandle: sh, targetHandle: th, type: "default",
+      label: active && label ? label : undefined, labelBgPadding: [4, 2], labelBgBorderRadius: 4,
+      animated: !!active,
+      style: { stroke: color, strokeWidth: active ? 2.4 : 1.2, opacity: faded ? 0.07 : active ? 1 : (showAll ? 0.6 : 0.13),
+               strokeDasharray: kind === "neg" ? "5 4" : undefined },
+      markerEnd: { type: MarkerType.ArrowClosed, color, width: 16, height: 16 },
+      zIndex: active ? 10 : 0,
+    };
+  });
+
+  const pick = id => { setLoop(null); setSel(id); };
+  const counts = COLS.map((c, i) => N.filter(n => n.col === i).length);
+  useEffect(() => { const t = setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 50); return () => clearTimeout(t); }, [hidden]);
+
+  const sn = sel && byId[sel];
+  const ins = sn ? E.filter(e => e[1] === sel) : [], outs = sn ? E.filter(e => e[0] === sel) : [];
+  const L = (e, other) => html`<div className="link" key=${e[0]+e[1]} onClick=${() => pick(other)}>
+      <span>${byId[other].icon}</span><span className="ln">${byId[other].title}</span>
+      ${e[2] && html`<span className="lr">— ${e[2]}</span>`}
+      ${e[4] && html`<span className="loop"><span className="tag" style=${{ background: loopOf[e[4]].color }}>${e[4]}</span></span>`}
+    </div>`;
+
+  return html`<div className="app"><div className="shell">
+    <aside className="side">
+      <div className="brand"><div className="logo">🔋</div><div><b>Battery ageing map</b><span>Edge 2021 × Attia 2022</span></div></div>
+      <input className="search" placeholder="Find a node" value=${q} onInput=${e => { setQ(e.target.value); setSel(null); setLoop(null); }} />
+      <div className="focusq">❓ Why does a Li-ion cell lose capacity — and why does the fade sometimes suddenly speed up?</div>
+
+      <div className="sec-h"><span>Layers</span><span>${N.length}</span></div>
+      ${COLS.map((c, i) => html`<div key=${c.key} className=${"row " + (hidden[c.key] ? "off" : "")}
+          onClick=${() => setHidden(h => ({ ...h, [c.key]: !h[c.key] }))}>
+          <span className="dot" style=${{ background: c.color }}></span>${c.title.slice(2)}<span className="cnt">${counts[i]}</span></div>`)}
+
+      <div className="sec-h"><span>Feedback loops</span><span>${LOOPS.length}</span></div>
+      ${LOOPS.map(l => html`<div key=${l.id} className=${"row loop " + (loop === l.id ? "on" : "")}
+          onClick=${() => { setSel(null); setQ(""); setLoop(loop === l.id ? null : l.id); }}>
+          <div className="lt"><span className="tag" style=${{ background: l.color }}>${l.id}</span>${l.name}</div>
+          <div className="ls">${l.story}</div></div>`)}
+
+      <div className="sec-h"><span>Paper</span></div>
+      <div className="pill">${["All", "Edge", "Attia"].map(p => html`<button key=${p} className=${"pbtn " + (paper === p ? "on" : "")}
+          onClick=${() => setPaper(p)}>${p}</button>`)}</div>
+    </aside>
+
+    <main className="canvas">
+      <div className="topbar">
+        <span className="chip"><b>${N.length}</b> concepts · <b>${E.length}</b> links · <b>${LOOPS.length}</b> loops</span>
+        ${(sel || loop || q) && html`<button className="btn ghost" onClick=${() => { setSel(null); setLoop(null); setQ(""); }}>✕ Clear</button>`}
+        <button className=${"btn ghost" + (showAll ? "" : "")} style=${{ marginLeft:"auto" }} onClick=${() => setShowAll(v => !v)}>${showAll ? "🔇 Quiet links" : "🕸️ Show all links"}</button>
+        <button className="btn" style=${{ marginLeft:0 }} onClick=${() => rf.fitView({ padding: 0.08, duration: 300 })}>⤢ Fit view</button>
+      </div>
+      <${ReactFlow} nodes=${shownNodes} edges=${edges} nodeTypes=${nodeTypes} onNodesChange=${onNodesChange}
+        onNodeClick=${(_, n) => n.type === "card" && pick(n.id === sel ? null : n.id)}
+        onPaneClick=${() => { setSel(null); }} fitView fitViewOptions=${{ padding: 0.08 }}
+        minZoom=${0.2} maxZoom=${2} nodesConnectable=${false} proOptions=${{ hideAttribution: true }}>
+        <${Background} variant="dots" gap=${18} size=${1.2} color="#d9d6cf" />
+        <${Controls} showInteractive=${false} position="bottom-right" />
+      </${ReactFlow}>
+    </main>
+
+    <aside className="detail">
+      ${sn ? html`<div>
+          <div className="kicker"><span className="dot" style=${{ display:"inline-block", background: COLS[sn.col].color, marginRight:6 }}></span>${COLS[sn.col].title.slice(2)}</div>
+          <h2>${sn.icon} ${sn.title}</h2>
+          <div className="muted">${sn.sub}${sn.badge && sn.col === 3 ? " · " + sn.badge : ""}</div>
+          <p>${sn.note}</p>
+          ${sn.chips && html`<div className="chips">${sn.chips.map(c => html`<span key=${c} className="c">${c}</span>`)}</div>`}
+          ${ins.length > 0 && html`<div className="box"><h4>Fed by</h4>${ins.map(e => L(e, e[0]))}</div>`}
+          ${outs.length > 0 && html`<div className="box"><h4>Leads to</h4>${outs.map(e => L(e, e[1]))}</div>`}
+          <div className="box"><h4>📄 Where in the papers</h4>${sn.src.map(s => html`<div key=${s} className="src">• ${s}</div>`)}</div>
+        </div>`
+      : loop ? html`<div>
+          <div className="kicker">${loopOf[loop].kind === "R" ? "Reinforcing loop (vicious circle)" : "Balancing loop (slows itself)"}</div>
+          <h2><span className="tag" style=${{ background: loopOf[loop].color, color:"#fff", borderRadius:6, padding:"1px 7px", fontSize:13 }}>${loop}</span> ${loopOf[loop].name}</h2>
+          <p>${loopOf[loop].story}</p>
+          <div className="box"><h4>📄 Source</h4><div className="src">${loopOf[loop].src}</div></div>
+          <p className="muted">Loops are why Edge calls degradation path-dependent and why Attia's snowball knees exist: a small push can grow by itself.</p>
+        </div>`
+      : html`<div>
+          <h2 style=${{ marginTop:0 }}>How to read</h2>
+          <p className="muted">Left → right: what happens inside → what tests can see → how a knee forms → what the user sees.</p>
+          <div className="box"><h4>Try</h4>
+            <div>• <b>Click a card</b> to trace what feeds it and what it feeds</div>
+            <div>• <b>Click a loop</b> on the left to light up one vicious circle</div>
+            <div>• Hide layers to simplify; drag cards freely</div></div>
+          <div className="box"><h4>Legend</h4><div className="legend">
+            <span className="ln-s"></span><span>leads to / promotes</span>
+            <span className="ln-d"></span><span>suppresses (balancing)</span>
+            <span className="ln-l"></span><span>part of a named loop (when selected)</span>
+            <span>❄️</span><span>snowball: grows exponentially</span>
+            <span>🙈</span><span>hidden: a 2nd process overtakes</span>
+            <span>🚪</span><span>threshold: silent creep, then break</span>
+            <span className="c ok" style=${{ fontSize:10 }}>✓</span><span>bulk state, visible to electrical tests</span>
+            <span className="c warn" style=${{ fontSize:10 }}>✗</span><span>subtle state, hard to detect (Attia p. 62)</span>
+          </div></div>
+          <div className="box"><h4>Sources</h4><div className="src">Edge et al. 2021, PCCP 23, 8200–8221 (journal pages).<br />
+            Attia et al. 2022, J. Electrochem. Soc. 169, 060517 (arXiv v1 PDF pages).<br />
+            Named loops are our reading of Edge Fig. 9 and Attia's pathway sections.</div></div>
+        </div>`}
+    </aside>
+  </div></div>`;
+}
+createRoot(document.getElementById("root")).render(html`<${ReactFlowProvider}><${App} /></${ReactFlowProvider}>`);
+</script>
+</body>
+</html>

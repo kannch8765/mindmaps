@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Gu et al. (2023) — Second-life battery review: overlap check (private)</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #fffdf8; font-family: system-ui, sans-serif; }
+  .markmap { width: 100%; height: 100vh; }
+  .markmap > svg { width: 100%; height: 100%; }
+  #hint { position: fixed; bottom: 10px; right: 14px; color: #999; font-size: 12px; }
+</style>
+<script>window.markmap = { autoLoader: { toolbar: true } };</script>
+<script src="https://cdn.jsdelivr.net/npm/markmap-autoloader@0.18"></script>
+</head>
+<body>
+<div class="markmap">
+<script type="text/template">
+---
+markmap:
+  colorFreezeLevel: 2
+  initialExpandLevel: 2
+  maxWidth: 260
+---
+
+# ❓ What does this review cover — and what gaps does it admit?<br>Gu et al. 2023 (arXiv 2308.06786)
+
+## 🗂️ What it covers (section map)
+- **§1 Intro**: positions itself vs Li et al. review [9] (p. 4)
+  - claims to add hybrid models, grouping standard, newer economics, power electronics (p. 4)
+- **§2 Degradation models**: PBM / DDM / hybrid, then SLB applicability (p. 4–10)
+- **§3 Fast screening + regrouping** (p. 10–13)
+  - shortest technical section, ~3 pages
+- **§4 Economic analysis** (p. 13–18)
+- **§5 Power electronics** for SL-BESS (p. 18–23)
+  - not in our scope
+
+## 🧪 Screening & methods
+- **Degradation models** (FLB-focused, p. 4–8)
+  - hybrid structures A1–A3, B1–B2, e.g. PINN (Fig. 3, p. 8)
+  - SLB-specific models "absent" (p. 8, p. 23)
+  - hurdles: lost first-life history + knee point (p. 8–10)
+  - knee tracks EOL: Attia, 303 cells, y = 0.984x + 93.9 (p. 9–10)
+- **Fast screening pipeline** (Fig. 5, p. 10–11)
+  - visual → fast parameter check → detailed tests (p. 10–11)
+  - abnormal resistance → straight to recycling (p. 11)
+  - one parameter alone is not enough (p. 11)
+  - robotic disassembly/screening: mostly academic, unverified (p. 11–12)
+- **Table 1 parameters ↔ tests** (p. 12)
+  - capacity CC-CV · voltage quasi-OCV vs SOC
+  - DC resistance / power: HPPC · impedance: EIS
+  - temperature: surface sensors
+- **Regrouping methods** (p. 12–13)
+  - rules: voltage; effective capacity at given rate + T (p. 12)
+  - ML: K-means, SOM, SVM regression (p. 12)
+  - by use: energy / power / energy-power scenarios (p. 12)
+  - speed: pulse + K-means 5 h → 2 min; HPPC micro-test 80 s (p. 12–13)
+- **"Regrouping standard"** = cell-to-cell tolerance (p. 13)
+  - NOT a regulatory standard
+  - stabilized variation as upper limit (p. 13)
+  - cooling layout changes variation (p. 13)
+
+## 💰 Economy / other
+- **Table 2**: 24 studies, on-grid / off-grid / mobile (p. 15)
+  - columns: econ model, degradation model, SLB cost, discount rate
+- **Profitable**: renewable firming, frequency regulation, peak shaving (p. 14, p. 23)
+- **Degradation in economics** mostly simplified (p. 16–17)
+  - profitable verdicts may be over-optimistic (p. 17)
+- **Assumptions + regions** (p. 18)
+  - static SOH at EOL 50–60%; discount 1–15% (p. 18)
+  - regions: China, US, Europe only (p. 18)
+- **§5 Power electronics**: equalization, PPP/FPP, reconfiguration (p. 18–23)
+
+## 🕳️ Gaps it admits
+- No SLB-specific degradation or knee models (p. 8, p. 10)
+- Need simple protocols revealing aging mechanisms (p. 9–10)
+- Allowable cell-to-cell variation not quantified (p. 13)
+- Screening automation lacks industrial verification (p. 11–12)
+- Econ: no standard methods, imprecise costs, EOL unknown (p. 16–18)
+
+## 🧭 Read together
+- p. 4 — Gu's own gap list vs Li et al. [9]
+- p. 11–12 — Fig. 5 pipeline + Table 1 parameters
+- p. 13 — §3.2.2 "regrouping standard" meaning
+- p. 15 — Table 2 economics + degradation models used
+</script>
+</div>
+<div id="hint">click a node to fold/unfold · scroll to zoom · drag to pan</div>
+</body>
+</html>
