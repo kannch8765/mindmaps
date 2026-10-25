@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tao et al. 2024 · Generative SoH at random arrival SOC</title>
+<link rel="stylesheet" href="https://esm.sh/@xyflow/react@12.3.6/dist/style.css">
+<script type="importmap">
+{ "imports": {
+  "react": "https://esm.sh/react@18.3.1",
+  "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
+  "react-dom": "https://esm.sh/react-dom@18.3.1?external=react",
+  "react-dom/client": "https://esm.sh/react-dom@18.3.1/client?external=react",
+  "@xyflow/react": "https://esm.sh/@xyflow/react@12.3.6?external=react,react-dom",
+  "htm": "https://esm.sh/htm@3.1.1"
+} }
+</script>
+<style>
+  :root {
+    --bg:#f6f5f2; --panel:#ffffff; --ink:#1f2328; --mute:#7a7f87; --line:#e7e4de; --soft:#f3f1ec;
+    --mech:#d9485f; --sec:#e8833a; --mode:#3e7cb1; --path:#7a5cc2; --eff:#2f8f5b; --neg:#2b8a8a;
+  }
+  * { box-sizing:border-box; }
+  html, body, #root { margin:0; height:100%; }
+  body { background:var(--bg); color:var(--ink);
+         font:13px/1.45 Inter, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  .app { display:flex; height:100vh; padding:14px; gap:0; }
+  .shell { flex:1; display:flex; background:var(--panel); border-radius:22px; overflow:hidden;
+           box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 30px rgba(0,0,0,.06); }
+
+  /* left sidebar */
+  .side { width:268px; border-right:1px solid var(--line); padding:16px 14px; overflow:auto; flex-shrink:0; }
+  .brand { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .logo { width:34px; height:34px; border-radius:10px; background:#1f2328; color:#fff; display:grid;
+          place-items:center; font-size:17px; }
+  .brand b { display:block; font-size:14px; }
+  .brand span { color:var(--mute); font-size:11.5px; }
+  .search { width:100%; border:1px solid var(--line); border-radius:10px; padding:8px 10px 8px 30px; font:inherit;
+            background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%237a7f87' stroke-width='2'%3E%3Ccircle cx='6' cy='6' r='4.5'/%3E%3Cpath d='M9.5 9.5 13 13'/%3E%3C/svg%3E") 10px center no-repeat; }
+  .search:focus { outline:2px solid #1f232822; }
+  .focusq { margin:12px 0 4px; padding:10px 12px; border-radius:12px; background:#fff8e6; border:1px solid #f1dfae;
+            font-weight:600; font-size:12.5px; }
+  .sec-h { display:flex; justify-content:space-between; color:var(--mute); font-size:11px; font-weight:600;
+           letter-spacing:.04em; text-transform:uppercase; margin:16px 2px 6px; }
+  .row { display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:10px; cursor:pointer;
+         border:1px solid transparent; user-select:none; }
+  .row:hover { background:var(--soft); }
+  .row.on { border-color:var(--line); background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.05); }
+  .row.off { opacity:.45; }
+  .dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+  .row .cnt { margin-left:auto; color:var(--mute); font-size:11px; }
+  .loop { display:block; }
+  .loop .lt { display:flex; align-items:center; gap:7px; font-weight:600; }
+  .loop .tag { font-size:10.5px; font-weight:700; padding:1px 6px; border-radius:6px; color:#fff; }
+  .loop .ls { color:var(--mute); font-size:11.5px; margin:2px 0 0 0; }
+  .pill { display:inline-flex; gap:6px; }
+  .pbtn { border:1px solid var(--line); background:#fff; border-radius:999px; padding:4px 10px; font:inherit;
+          font-size:12px; cursor:pointer; }
+  .pbtn.on { background:#1f2328; color:#fff; border-color:#1f2328; }
+
+  /* canvas */
+  .canvas { flex:1; position:relative; min-width:0; background:#fbfaf8; }
+  .topbar { position:absolute; z-index:5; top:12px; left:12px; right:12px; display:flex; gap:8px; align-items:center;
+            pointer-events:none; }
+  .chip { pointer-events:auto; background:#fff; border:1px solid var(--line); border-radius:999px; padding:5px 11px;
+          font-size:12px; color:var(--mute); box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  .chip b { color:var(--ink); font-weight:600; }
+  .btn { pointer-events:auto; margin-left:auto; background:#1f2328; color:#fff; border:0; border-radius:10px;
+         padding:7px 12px; font:inherit; font-size:12px; cursor:pointer; }
+  .btn.ghost { margin-left:0; background:#fff; color:var(--ink); border:1px solid var(--line); }
+
+  /* cards */
+  .card { width:232px; background:#fff; border:1px solid var(--line); border-radius:14px; padding:10px 11px 9px;
+          box-shadow:0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.04); transition:opacity .18s, box-shadow .18s;
+          cursor:pointer; }
+  .card:hover { box-shadow:0 2px 4px rgba(0,0,0,.06), 0 8px 22px rgba(0,0,0,.08); }
+  .card.focus { border-color:#1f2328; box-shadow:0 0 0 3px #1f232814, 0 8px 22px rgba(0,0,0,.10); }
+  .card.dim { opacity:.16; }
+  .card.hit { box-shadow:0 0 0 3px #ffd84d88; }
+  .card .hd { display:flex; gap:9px; align-items:flex-start; }
+  .ic { width:30px; height:30px; border-radius:9px; display:grid; place-items:center; font-size:15px; flex-shrink:0; }
+  .ttl { font-weight:650; font-size:13px; line-height:1.25; }
+  .sub { color:var(--mute); font-size:11px; margin-top:1px; }
+  .badge { margin-left:auto; font-size:11px; white-space:nowrap; padding:1px 6px; border-radius:7px;
+           background:var(--soft); color:#444; }
+  .chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:7px; }
+  .c { font-size:10.5px; padding:1px 7px; border-radius:999px; background:var(--soft); color:#555; }
+  .c.warn { background:#fdecef; color:#b23a4c; }
+  .c.ok { background:#e8f5ee; color:#23744a; }
+  .hdr { font-weight:700; font-size:12px; color:var(--ink); background:transparent; width:232px; }
+  .hdr span { display:block; color:var(--mute); font-weight:500; font-size:11px; }
+  .react-flow__handle { opacity:0; width:6px; height:6px; min-width:0; min-height:0; border:0; }
+  .react-flow__edge-textbg { fill:#fbfaf8; }
+  .react-flow__edge-text { font-size:10.5px; fill:#444; }
+  .react-flow__attribution { display:none; }
+
+  /* right panel */
+  .detail { width:322px; border-left:1px solid var(--line); padding:16px; overflow:auto; flex-shrink:0; }
+  .detail h2 { font-size:16px; margin:8px 0 2px; }
+  .detail .kicker { color:var(--mute); font-size:11.5px; }
+  .detail p { margin:8px 0; }
+  .box { border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin:10px 0; }
+  .box h4 { margin:0 0 6px; font-size:11px; color:var(--mute); text-transform:uppercase; letter-spacing:.04em; }
+  .link { display:flex; gap:6px; align-items:baseline; padding:3px 0; cursor:pointer; }
+  .link:hover .ln { text-decoration:underline; }
+  .link .lr { color:var(--mute); font-size:11.5px; }
+  .src { font-size:11.5px; color:#555; }
+  .rq { background:#f4f0ff; border-color:#e2d8fb; }
+  .legend { display:grid; grid-template-columns:22px 1fr; gap:5px 8px; align-items:center; font-size:12px; }
+  .ln-s { height:0; border-top:2px solid #9aa0a6; }
+  .ln-d { height:0; border-top:2px dashed var(--neg); }
+  .ln-l { height:0; border-top:3px solid var(--mech); }
+  .muted { color:var(--mute); font-size:12px; }
+  @media (max-width: 1180px) { .side { width:220px; } .detail { width:260px; } .app { padding:8px; } }
+  @media (max-width: 900px) {
+    .shell { flex-direction:column; } .canvas { min-height:56vh; }
+    .side { width:auto; max-height:24vh; border-right:0; border-bottom:1px solid var(--line); }
+    .detail { width:auto; max-height:30vh; border-left:0; border-top:1px solid var(--line); } }
+  .c.lim { background:#fff4e0; color:#9a5b00; }
+  .step { display:flex; gap:8px; align-items:flex-start; }
+  .num { width:20px; height:20px; border-radius:50%; background:#1f2328; color:#fff; font-size:11px; font-weight:700;
+               display:grid; place-items:center; flex-shrink:0; margin-top:1px; }
+
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+// Tao et al. 2024, Nature Communications 15, 10154. Pages = PDF pages of the published article (1–14).
+window.MAP = {
+  title: "Tao et al. 2024",
+  subtitle: "Generative SoH at random arrival SOC",
+  logo: "⭐",
+  focus: "Can we estimate a retired battery's SoH at whatever SOC it arrives at, without recharging it first?",
+  howto: [
+    "Left → right: why it's hard → what data they have → how the generator works → how SoH is estimated → what it saves → what to watch out for.",
+    "Orange ⚠ chips and the last column are our reading of the limits, not the authors' claims.",
+  ],
+  cols: [
+    { title: "① Problem", hint: "why fast SoH is hard here", color: "#d9485f", tint: "#fdecef" },
+    { title: "② Data", hint: "what they measured", color: "#e8833a", tint: "#fdf0e5" },
+    { title: "③ Generator", hint: "attention VAE (Fig. 1b)", color: "#7a5cc2", tint: "#f0ebfa" },
+    { title: "④ SoH estimation", hint: "regressor on generated data", color: "#3e7cb1", tint: "#e8f0f8" },
+    { title: "⑤ Impact", hint: "cost & CO₂ (Fig. 5)", color: "#2f8f5b", tint: "#e7f4ec" },
+    { title: "⑥ Limits", hint: "our reading", color: "#b8860b", tint: "#fff4e0" },
+  ],
+  nodes: [
+    // ① problem
+    { id: "random", col: 0, row: 0, icon: "🎲", title: "Random arrival SOC", sub: "Problem",
+      chips: ["usually ≤ 50% SOC"],
+      note: "Retired batteries arrive at random states of charge, usually low because they are discharged for safe warehouse storage. That's why the study covers 5–50% SOC.",
+      src: ["p. 5 (SOC range assumption)", "Fig. 2e, p. 4"] },
+    { id: "shift", col: 0, row: 1.2, icon: "📉", title: "Pulse response shifts with SOC", sub: "Problem · domain shift",
+      chips: ["OOD"],
+      note: "The same battery gives a different pulse response at a different SOC. A model trained at some SOC levels breaks at others: the classic train ≠ deploy (out-of-distribution) problem. SOC is continuous, so you can't measure every level.",
+      src: ["p. 2 (domain shift)", "Fig. 2d, p. 4", "p. 5 (can't be exhausted)"] },
+    { id: "history", col: 0, row: 2.4, icon: "🔌", title: "History lost at retirement", sub: "Problem",
+      chips: ["passport gap"],
+      note: "Cloud platforms and battery passports record data only during service. Once retired, the battery is no longer connected to the in-vehicle monitoring unit, so field SoH data are hard to get.",
+      src: ["p. 2"] },
+    { id: "slow", col: 0, row: 3.6, icon: "⏳", title: "Ground truth is slow", sub: "Problem",
+      chips: ["HPPC > 12 h"],
+      note: "A capacity calibration (CCCV) test is lengthy, and a full HPPC pulse sequence takes over 12 hours. Invasive material analysis is not an option at scale.",
+      src: ["p. 2"] },
+    { id: "cond", col: 0, row: 4.8, icon: "🔋", title: "Old fix: SOC conditioning", sub: "Problem · baseline",
+      chips: ["time", "electricity", "CO₂"],
+      note: "Charge or discharge every battery to a set SOC before the pulse test (their earlier work assumed 5% SOC). Straightforward, but it costs test time and electricity.",
+      src: ["p. 2", "Fig. 1a, p. 3"] },
+
+    // ② data
+    { id: "set", col: 1, row: 0.3, icon: "🗃️", title: "2,700 samples · 270 batteries", sub: "Data",
+      chips: ["10 SOC levels", "5–50%, step 5%"],
+      note: "Each of 270 physically retired batteries is pulse-tested at 10 SOC levels. The authors call it the largest rapid-pulse dataset for retired-battery SoH so far.",
+      src: ["p. 3 (Dataset acquisition)", "Fig. 2a, p. 4"] },
+    { id: "mix", col: 1, row: 1.6, icon: "🧺", title: "Heterogeneous mix", sub: "Data",
+      chips: ["119 NMC", "56 LFP", "95 LMO"],
+      note: "3 cathode types, 3 formats (cylindrical, pouch, prismatic), 4 capacity designs (2.1–35 Ah), 4 usage histories (1 lab accelerated, 1 pure EV, 2 hybrid EV).",
+      src: ["p. 3", "Fig. 2a, p. 4"] },
+    { id: "pulse", col: 1, row: 2.9, icon: "⚡", title: "Pulse test → 21 features", sub: "Data · feature engineering",
+      chips: ["U1–U21", "100 Hz", "25 °C"],
+      note: "Five short current pulses; the turning points of the voltage response (zero second derivative) give 21 features. 25 s rest between pulses. Pulse widths from 30 ms to 5 s were tested for robustness.",
+      src: ["pp. 3–4", "Fig. 2b, p. 4"] },
+    { id: "label", col: 1, row: 4.2, icon: "🏷️", title: "SoH label = CCCV capacity", sub: "Data · ground truth",
+      chips: ["SoH 0.6–1"],
+      note: "The slow CCCV capacity test gives the SoH benchmark; pulse data are the model inputs. SoH spans roughly 0.6 to 1, including some very early retirements.",
+      src: ["pp. 2–4", "Fig. 2c, p. 4"] },
+
+    // ③ generator
+    { id: "vae", col: 2, row: 0.6, icon: "🪄", title: "Attention VAE", sub: "Generator",
+      chips: ["encoder", "decoder"],
+      note: "The encoder compresses measured pulse features (plus conditions) into a latent space; the decoder rebuilds them. To generate, the decoder gets Gaussian noise plus the target conditions: no new physical test.",
+      src: ["p. 5 (data generation)", "Fig. 1b, p. 3", "Methods pp. 10–11"] },
+    { id: "condin", col: 2, row: 1.8, icon: "🎛️", title: "Conditions: SOC + SoH", sub: "Generator · cross-attention",
+      note: "Cross-attention links the retirement conditions to the pulse features, so the model learns how the response changes with SOC. SoH is also given as a condition.",
+      src: ["Methods p. 10 (cross-attention)", "p. 11 (SoH and SOC dimensions)"] },
+    { id: "recon", col: 2, row: 3.0, icon: "🔁", title: "Check 1: reconstruction", sub: "Generator · result",
+      chips: ["MAPE < 1%"],
+      note: "Rebuilding measured data works for all 21 features with MAPE below 1%. Error is a bit higher at low SOC, so the authors recommend mid-SOC pulses when possible.",
+      src: ["Fig. 3a–b, p. 6", "p. 5"] },
+    { id: "cases", col: 2, row: 4.2, icon: "🧪", title: "Check 2: unseen SOC (8 cases)", sub: "Generator · result",
+      chips: ["Case 0–3 interpolate", "Case 4–7 extrapolate"],
+      note: "Interpolation: train at e.g. 5/25/50% SOC, generate 10–45% (Case 3). Extrapolation: generate SOC levels outside the training range. Interpolation generation error stays below 2%.",
+      src: ["Fig. 3c–d, p. 6", "pp. 5–6"] },
+    { id: "scale", col: 2, row: 5.4, icon: "📏", title: "Latent space scaling", sub: "Generator · for extrapolation",
+      note: "For out-of-range SOC, prior knowledge rescales the latent distribution. Without it, error grows the further the target is from the training data.",
+      src: ["p. 6", "Methods p. 11"] },
+
+    // ④ SoH estimation
+    { id: "rf", col: 3, row: 0.6, icon: "🌲", title: "Random forest regressor", sub: "SoH estimation",
+      chips: ["20 trees", "scikit-learn"],
+      note: "A simple random forest is trained on generated features and estimates SoH from a fresh pulse at whatever SOC the battery arrived at. Same hyperparameters across cases.",
+      src: ["Methods p. 12", "Fig. 1c, p. 3"] },
+    { id: "inter", col: 3, row: 1.8, icon: "🎯", title: "Interpolation: MAPE 4.4%", sub: "Result", chips: ["σ 2.5"],
+      note: "Average SoH error when the target SOC lies inside the training range.",
+      src: ["p. 7", "Fig. 4a–b, p. 8"] },
+    { id: "extra", col: 3, row: 3.0, icon: "🎯", title: "Extrapolation: MAPE 6.0%", sub: "Result", chips: ["σ 2.7"],
+      note: "Average SoH error when the target SOC lies outside the training range: harder, but still usable thanks to latent scaling.",
+      src: ["p. 7", "Fig. 4a, p. 8"] },
+    { id: "compare", col: 3, row: 4.2, icon: "⚖️", title: "With vs without generation", sub: "Result · the headline",
+      chips: ["17.3% → 5.4%", "23.8% → 6.0%"],
+      note: "Training only on the measured SOC levels biases estimates toward the training data (Case 3: MAPE 17.3%). Generated data cut it to 5.4%. With only 5–10% SOC data (Case 7): 23.8% → 6.0%.",
+      src: ["p. 7", "Fig. 4c–d, p. 8"] },
+    { id: "bias", col: 3, row: 5.4, icon: "↕️", title: "Over/under-estimation at SOC ends", sub: "Result · caveat",
+      note: "SoH is overestimated at higher SOC and underestimated at lower SOC, which the authors link to the Gaussian latent prior.",
+      src: ["p. 7"] },
+
+    // ⑤ impact
+    { id: "co2", col: 4, row: 0.6, icon: "🌱", title: "CO₂ per ton (NMC)", sub: "Impact",
+      chips: ["pyro 1104 → 753", "hydro 729 → 379", "direct 579 → 228"],
+      note: "kg CO₂-eq per ton of retired NMC batteries, CCCV vs generative pretreatment, assuming 80% SOH and 50% SOC.",
+      src: ["p. 7", "Fig. 5b, p. 9"] },
+    { id: "breakeven", col: 4, row: 1.9, icon: "📦", title: "Cheapest beyond ~5.3 t", sub: "Impact",
+      note: "Generative learning becomes the cheapest pretreatment above a 5.33-ton retirement scale (and beats pulse tests at 25% SOC from 1.07 t).",
+      src: ["p. 7", "Fig. 5c, p. 9"] },
+    { id: "y2030", col: 4, row: 3.2, icon: "🌍", title: "2030: $4.9B · 35.8B kg CO₂", sub: "Impact · global scenario",
+      note: "Projected savings if the method were deployed uniformly in a 2030 worldwide retirement scenario.",
+      src: ["Abstract p. 1", "Fig. 1d, p. 3", "Fig. 5e–f, p. 9"] },
+    { id: "assume", col: 4, row: 4.5, icon: "📝", title: "Assumptions behind the numbers", sub: "Impact · read carefully",
+      chips: ["80% SOH", "50% SOC", "uniform use"],
+      note: "The economic numbers assume 80% SOH, 50% SOC and uniform deployment; LMO is left out of the economic analysis.",
+      src: ["p. 7 (LMO not covered)", "Fig. 5 caption, p. 9"] },
+
+    // ⑥ limits (our reading)
+    { id: "onecell", col: 5, row: 0, icon: "🔍", title: "Main figures: one cell type", sub: "Limit",
+      chips: ["⚠ NMC 2.1 Ah"],
+      note: "Figs. 3–4 show NMC 2.1 Ah lab-aged cells only; the other batteries are in the supplementary material.",
+      src: ["Fig. 3 & 4 captions, pp. 6, 8"] },
+    { id: "temp", col: 5, row: 1.1, icon: "🌡️", title: "Tested at 25 °C only", sub: "Limit",
+      chips: ["⚠ no hot/cold"],
+      note: "Pulse tests ran at a controlled 25 °C. How the method behaves in hot or humid field conditions is not tested.",
+      src: ["Fig. 2b caption, p. 4"] },
+    { id: "cellsonly", col: 5, row: 2.2, icon: "🧱", title: "Cells, not modules or packs", sub: "Limit · our reading",
+      chips: ["⚠ our read"],
+      note: "The main text tests single cells; no module- or pack-level validation.",
+      src: ["Dataset section, p. 3"] },
+    { id: "caponly", col: 5, row: 3.3, icon: "🔋", title: "SoH = capacity only", sub: "Limit · our reading",
+      chips: ["⚠ our read"],
+      note: "SoH is capacity-based; no resistance/power SoH and no diagnosis of the degradation cause (mode).",
+      src: ["pp. 2–3"] },
+    { id: "chosen", col: 5, row: 4.4, icon: "🏷️", title: "Synthetic samples get chosen SoH", sub: "Limit · our reading",
+      chips: ["⚠ our read"],
+      note: "Because SoH is a generator condition, the SoH labels of synthetic samples are set by the user, not measured.",
+      src: ["Methods p. 11"] },
+    { id: "socknown", col: 5, row: 5.5, icon: "❔", title: "How is arrival SOC known?", sub: "Open question",
+      chips: ["⚠ our read"],
+      note: "The main text doesn't say how a battery's arrival SOC is determined at deployment, or whether the regressor takes it as an input.",
+      src: ["Not stated in main text"] },
+  ],
+  edges: [
+    ["random", "shift", "pulse depends on SOC", "n"], ["shift", "cond", "old workaround", "n"],
+    ["history", "slow", "no records → must test", "n"], ["slow", "cond", "", "n"],
+    ["shift", "vae", "learn the SOC dependence", "n"], ["cond", "vae", "replace with generation", "n"],
+    ["mix", "set", "", "n"], ["set", "pulse", "", "n"], ["pulse", "vae", "train on measured features", "n"],
+    ["label", "rf", "SoH labels", "n"], ["label", "condin", "SoH as condition", "n"],
+    ["condin", "vae", "cross-attention", "n"], ["vae", "recon", "", "n"], ["vae", "cases", "generate unseen SOC", "n"],
+    ["scale", "cases", "needed for extrapolation", "n"], ["cases", "rf", "generated training data", "n"],
+    ["rf", "inter", "", "n"], ["rf", "extra", "", "n"], ["rf", "compare", "", "n"], ["scale", "extra", "", "n"],
+    ["vae", "bias", "Gaussian latent prior", "n"],
+    ["rf", "co2", "skip SOC conditioning", "n"], ["cond", "co2", "cost avoided", "n"],
+    ["co2", "breakeven", "", "n"], ["breakeven", "y2030", "", "n"], ["assume", "y2030", "assumes", "n"],
+    ["inter", "onecell", "shown on NMC 2.1 Ah", "n"], ["pulse", "temp", "25 °C", "n"], ["set", "cellsonly", "", "n"],
+    ["label", "caponly", "capacity label", "n"], ["condin", "chosen", "", "n"], ["random", "socknown", "", "n"],
+  ],
+  groups: {
+    label: "🧭 Read-together route", kind: "route",
+    items: [
+      { id: "S1", name: "Fig. 1: the whole idea", story: "Old way vs new way: skip SOC conditioning, generate the missing data.",
+        src: "Fig. 1, p. 3", nodes: ["random", "cond", "vae", "rf", "y2030"] },
+      { id: "S2", name: "Fig. 2: data and the SOC shift", story: "What a pulse feature is, and how it drifts with SOC.",
+        src: "Fig. 2b, 2d, p. 4", nodes: ["random", "shift", "set", "mix", "pulse", "label"] },
+      { id: "S3", name: "Fig. 3: can it generate?", story: "Reconstruction < 1%, then 8 interpolation/extrapolation cases.",
+        src: "Fig. 3, p. 6", nodes: ["vae", "condin", "recon", "cases", "scale"] },
+      { id: "S4", name: "Fig. 4: does SoH improve?", story: "4.4% / 6.0% MAPE; 17.3% → 5.4% with generation.",
+        src: "Fig. 4, p. 8", nodes: ["cases", "rf", "inter", "extra", "compare", "bias"] },
+      { id: "S5", name: "Fig. 5: what it saves", story: "CO₂ and cost per recycling route, and the assumptions behind them.",
+        src: "Fig. 5, p. 9", nodes: ["rf", "cond", "co2", "breakeven", "y2030", "assume"] },
+      { id: "S6", name: "What to watch out for", story: "One cell type, 25 °C, cells only, capacity-only SoH.",
+        src: "Our reading", nodes: ["onecell", "temp", "cellsonly", "caponly", "chosen", "socknown"] },
+    ],
+  },
+  legend: [
+    ['<span class="ln-s"></span>', "leads to / feeds"],
+    ['<span class="num" style="width:18px;height:18px;border-radius:50%;background:#1f2328;color:#fff;font-size:10px;display:grid;place-items:center">1</span>', "route step: lights up the cards for one figure"],
+    ['<span class="c lim">⚠</span>', "limit: our reading, not the authors' claim"],
+  ],
+  sources: [
+    "Tao, S., Ma, R., Zhao, Z. et al. (2024). Generative learning assisted state-of-health estimation for sustainable battery recycling with random retirement conditions. Nature Communications 15, 10154.",
+    "Page numbers = PDF pages of the published article.",
+  ],
+};
+
+</script>
+<script type="module">
+// Card-canvas concept graph engine (React Flow + htm). Reads a global MAP object.
+// MAP = { title, subtitle, logo, focus, cols:[{title,hint,color,tint}], X?, Y0?, DY?, nodes:[...], edges:[...],
+//         groups:{ label, kind:"loops"|"route", items:[{id,name,story,src,color?,kind?,nodes?}] },
+//         legend:[[symbolHtml,text]], sources:[...], howto:[...] }
+// node = { id, col, row, icon, title, sub, chips?, badge?, note, src:[...], rq?, papers? }
+// edge = [source, target, label, kind ("n"|"neg"), groupId?]
+import React, { useMemo, useState, useCallback, useEffect } from "react";
+import { createRoot } from "react-dom/client";
+import { ReactFlow, Background, Controls, Handle, Position, MarkerType, useNodesState, useReactFlow,
+         ReactFlowProvider } from "@xyflow/react";
+import htm from "htm";
+const html = htm.bind(React.createElement);
+
+const M = window.MAP;
+const COLS = M.cols, N = M.nodes, E = M.edges, G = M.groups.items;
+const X = M.X || COLS.map((_, i) => i * 330), Y0 = M.Y0 ?? 70, DY = M.DY ?? 128;
+const byId = Object.fromEntries(N.map(n => [n.id, n]));
+const gOf = Object.fromEntries(G.map(g => [g.id, g]));
+const isRoute = M.groups.kind === "route";
+const chipCls = c => "c" + (c.startsWith("✗") ? " warn" : c.startsWith("✓") ? " ok" : c.startsWith("⚠") ? " lim" : "");
+
+const H = [["l", Position.Left], ["r", Position.Right], ["t", Position.Top], ["b", Position.Bottom]];
+function Card({ data }) {
+  const n = data.n, col = COLS[n.col];
+  return html`<div className=${"card " + (data.cls || "")}>
+    ${H.map(([k, p]) => html`<${Handle} key=${k + "s"} id=${k + "s"} type="source" position=${p} />`)}
+    ${H.map(([k, p]) => html`<${Handle} key=${k + "t"} id=${k + "t"} type="target" position=${p} />`)}
+    <div className="hd">
+      <div className="ic" style=${{ background: col.tint }}>${n.icon}</div>
+      <div style=${{ minWidth: 0 }}><div className="ttl">${n.title}</div><div className="sub">${n.sub}</div></div>
+      ${n.badge && html`<div className="badge">${n.badge}</div>`}
+    </div>
+    ${n.chips && html`<div className="chips">${n.chips.map(c => html`<span key=${c} className=${chipCls(c)}>${c}</span>`)}</div>`}
+  </div>`;
+}
+function Header({ data }) {
+  const c = data.c;
+  return html`<div className="hdr"><span style=${{ color: c.color, display: "inline", fontWeight: 700, fontSize: 12 }}>●</span> ${c.title}<span>${c.hint}</span></div>`;
+}
+const nodeTypes = { card: Card, header: Header };
+
+function handlesFor(s, t) {
+  const a = byId[s], b = byId[t];
+  if (b.col > a.col) return ["rs", "lt"];
+  if (b.col < a.col) return ["ls", "rt"];
+  return b.row > a.row ? ["bs", "tt"] : ["ts", "bt"];
+}
+const initialNodes = [
+  ...COLS.map((c, i) => ({ id: "h-" + i, type: "header", position: { x: X[i], y: 4 }, data: { c, i }, draggable: false, selectable: false })),
+  ...N.map(n => ({ id: n.id, type: "card", position: { x: X[n.col], y: Y0 + n.row * DY }, data: { n } })),
+];
+const groupNodes = g => {
+  if (!g) return null;
+  if (g.nodes) return new Set(g.nodes);
+  const s = new Set(); E.forEach(([a, b, , , l]) => { if (l === g.id) { s.add(a); s.add(b); } });
+  if (g.single) s.add(g.single);
+  return s;
+};
+const edgeInGroup = (e, g, set) => g.nodes ? (set.has(e[0]) && set.has(e[1])) : e[4] === g.id;
+
+function App() {
+  const [nodes, , onNodesChange] = useNodesState(initialNodes);
+  const h0 = decodeURIComponent(location.hash.slice(1));
+  const [sel, setSel] = useState(byId[h0] ? h0 : null);
+  const [grp, setGrp] = useState(gOf[h0] ? h0 : null);
+  const [hidden, setHidden] = useState({});
+  const [q, setQ] = useState("");
+  const [showAll, setShowAll] = useState(false);
+  const rf = useReactFlow();
+
+  const visible = useCallback(id => { const n = byId[id]; return !n || !hidden[n.col]; }, [hidden]);
+  const hood = useMemo(() => {
+    if (!sel) return null;
+    const s = new Set([sel]); E.forEach(([a, b]) => { if (a === sel) s.add(b); if (b === sel) s.add(a); }); return s;
+  }, [sel]);
+  const gSet = useMemo(() => groupNodes(gOf[grp]), [grp]);
+  const hits = useMemo(() => {
+    const t = q.trim().toLowerCase(); if (!t) return null;
+    return new Set(N.filter(n => (n.title + " " + n.sub + " " + n.note).toLowerCase().includes(t)).map(n => n.id));
+  }, [q]);
+
+  const shownNodes = nodes.map(nd => {
+    if (nd.type === "header") return { ...nd, hidden: !!hidden[nd.data.i] };
+    let cls = "";
+    if (hood) cls = nd.id === sel ? "focus" : hood.has(nd.id) ? "" : "dim";
+    else if (gSet) cls = gSet.has(nd.id) ? "" : "dim";
+    else if (hits) cls = hits.has(nd.id) ? "hit" : "dim";
+    return { ...nd, hidden: !visible(nd.id), data: { ...nd.data, cls } };
+  });
+
+  const g = gOf[grp];
+  const edges = E.filter(([a, b]) => visible(a) && visible(b)).map((e, i) => {
+    const [a, b, label, kind, l] = e;
+    const [sh, th] = handlesFor(a, b);
+    const inHood = hood && (a === sel || b === sel);
+    const inG = g && edgeInGroup(e, g, gSet);
+    const active = inHood || inG;
+    const faded = (hood && !inHood) || (g && !inG) || (hits && !(hits.has(a) && hits.has(b)));
+    const gc = g && (g.color || "#1f2328");
+    const color = inG ? gc : kind === "neg" ? "#2b8a8a" : active ? "#1f2328" : "#b9bec5";
+    return {
+      id: "e" + i, source: a, target: b, sourceHandle: sh, targetHandle: th, type: "default",
+      label: active && label ? label : undefined, labelBgPadding: [4, 2], labelBgBorderRadius: 4, animated: !!active,
+      style: { stroke: color, strokeWidth: active ? 2.4 : 1.2, opacity: faded ? 0.07 : active ? 1 : (showAll ? 0.6 : 0.13),
+               strokeDasharray: kind === "neg" ? "5 4" : undefined },
+      markerEnd: { type: MarkerType.ArrowClosed, color, width: 16, height: 16 }, zIndex: active ? 10 : 0,
+    };
+  });
+
+  const pick = id => { setGrp(null); setSel(id); };
+  useEffect(() => { const t = setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 50); return () => clearTimeout(t); }, [hidden]);
+
+  const sn = sel && byId[sel];
+  const ins = sn ? E.filter(e => e[1] === sel) : [], outs = sn ? E.filter(e => e[0] === sel) : [];
+  const L = (e, other) => html`<div className="link" key=${e[0] + e[1]} onClick=${() => pick(other)}>
+      <span>${byId[other].icon}</span><span className="ln">${byId[other].title}</span>
+      ${e[2] && html`<span className="lr">— ${e[2]}</span>`}
+      ${e[4] && gOf[e[4]] && html`<span className="loop"><span className="tag" style=${{ background: gOf[e[4]].color }}>${e[4]}</span></span>`}
+    </div>`;
+  const tagOf = (it, idx) => isRoute
+    ? html`<span className="num">${idx + 1}</span>`
+    : html`<span className="tag" style=${{ background: it.color }}>${it.id}</span>`;
+
+  return html`<div className="app"><div className="shell">
+    <aside className="side">
+      <div className="brand"><div className="logo">${M.logo}</div><div><b>${M.title}</b><span>${M.subtitle}</span></div></div>
+      <input className="search" placeholder="Find a node" value=${q} onInput=${e => { setQ(e.target.value); setSel(null); setGrp(null); }} />
+      <div className="focusq">❓ ${M.focus}</div>
+      <div className="sec-h"><span>Layers</span><span>${N.length}</span></div>
+      ${COLS.map((c, i) => html`<div key=${i} className=${"row " + (hidden[i] ? "off" : "")} onClick=${() => setHidden(h => ({ ...h, [i]: !h[i] }))}>
+          <span className="dot" style=${{ background: c.color }}></span>${c.title.replace(/^\S+\s/, "")}<span className="cnt">${N.filter(n => n.col === i).length}</span></div>`)}
+      <div className="sec-h"><span>${M.groups.label}</span><span>${G.length}</span></div>
+      ${G.map((it, idx) => html`<div key=${it.id} className=${"row loop " + (grp === it.id ? "on" : "")}
+          onClick=${() => { setSel(null); setQ(""); setGrp(grp === it.id ? null : it.id); }}>
+          <div className="lt">${tagOf(it, idx)}${it.name}</div><div className="ls">${it.story}</div></div>`)}
+    </aside>
+
+    <main className="canvas">
+      <div className="topbar">
+        <span className="chip"><b>${N.length}</b> concepts · <b>${E.length}</b> links</span>
+        ${(sel || grp || q) && html`<button className="btn ghost" onClick=${() => { setSel(null); setGrp(null); setQ(""); }}>✕ Clear</button>`}
+        <button className="btn ghost" style=${{ marginLeft: "auto" }} onClick=${() => setShowAll(v => !v)}>${showAll ? "🔇 Quiet links" : "🕸️ Show all links"}</button>
+        <button className="btn" style=${{ marginLeft: 0 }} onClick=${() => rf.fitView({ padding: 0.08, duration: 300 })}>⤢ Fit view</button>
+      </div>
+      <${ReactFlow} nodes=${shownNodes} edges=${edges} nodeTypes=${nodeTypes} onNodesChange=${onNodesChange}
+        onNodeClick=${(_, n) => n.type === "card" && pick(n.id === sel ? null : n.id)} onPaneClick=${() => setSel(null)}
+        fitView fitViewOptions=${{ padding: 0.08 }} minZoom=${0.2} maxZoom=${2} nodesConnectable=${false} proOptions=${{ hideAttribution: true }}>
+        <${Background} variant="dots" gap=${18} size=${1.2} color="#d9d6cf" />
+        <${Controls} showInteractive=${false} position="bottom-right" />
+      </${ReactFlow}>
+    </main>
+
+    <aside className="detail">
+      ${sn ? html`<div>
+          <div className="kicker"><span className="dot" style=${{ display: "inline-block", background: COLS[sn.col].color, marginRight: 6 }}></span>${COLS[sn.col].title.replace(/^\S+\s/, "")}</div>
+          <h2>${sn.icon} ${sn.title}</h2>
+          <div className="muted">${sn.sub}</div>
+          <p>${sn.note}</p>
+          ${sn.chips && html`<div className="chips">${sn.chips.map(c => html`<span key=${c} className=${chipCls(c)}>${c}</span>`)}</div>`}
+          ${sn.rq && html`<div className="box rq"><h4>🎯 For our review</h4>${sn.rq}</div>`}
+          ${ins.length > 0 && html`<div className="box"><h4>Fed by</h4>${ins.map(e => L(e, e[0]))}</div>`}
+          ${outs.length > 0 && html`<div className="box"><h4>Leads to</h4>${outs.map(e => L(e, e[1]))}</div>`}
+          <div className="box"><h4>📄 Where in the paper</h4>${sn.src.map(s => html`<div key=${s} className="src">• ${s}</div>`)}</div>
+        </div>`
+      : g ? html`<div>
+          <div className="kicker">${isRoute ? "Read-together route · step " + (G.indexOf(g) + 1) + " of " + G.length : g.kind === "B" ? "Balancing loop (slows itself)" : "Reinforcing loop (vicious circle)"}</div>
+          <h2>${g.name}</h2>
+          <p>${g.story}</p>
+          ${g.detail && html`<p className="muted">${g.detail}</p>`}
+          <div className="box"><h4>📄 Where</h4><div className="src">${g.src}</div></div>
+          ${isRoute && html`<div className="pill">
+            ${G.indexOf(g) > 0 && html`<button className="pbtn" onClick=${() => setGrp(G[G.indexOf(g) - 1].id)}>← Back</button>`}
+            ${G.indexOf(g) < G.length - 1 && html`<button className="pbtn on" onClick=${() => setGrp(G[G.indexOf(g) + 1].id)}>Next step →</button>`}
+          </div>`}
+        </div>`
+      : html`<div>
+          <h2 style=${{ marginTop: 0 }}>How to read</h2>
+          ${M.howto.map((t, i) => html`<p key=${i} className="muted">${t}</p>`)}
+          <div className="box"><h4>Try</h4>
+            <div>• <b>Click a card</b> to trace what feeds it and what it feeds</div>
+            <div>• <b>${isRoute ? "Click step 1" : "Click a loop"}</b> on the left${isRoute ? " and follow Next →" : " to light it up"}</div>
+            <div>• Hide layers to simplify; drag cards freely</div></div>
+          <div className="box"><h4>Legend</h4><div className="legend">
+            ${M.legend.map(([sym, txt], i) => html`<${React.Fragment} key=${i}><span dangerouslySetInnerHTML=${{ __html: sym }}></span><span>${txt}</span></${React.Fragment}>`)}
+          </div></div>
+          <div className="box"><h4>Sources</h4>${M.sources.map((s, i) => html`<div key=${i} className="src">${s}</div>`)}</div>
+        </div>`}
+    </aside>
+  </div></div>`;
+}
+createRoot(document.getElementById("root")).render(html`<${ReactFlowProvider}><${App} /></${ReactFlowProvider}>`);
+
+</script>
+</body>
+</html>
