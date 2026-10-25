@@ -40,6 +40,8 @@
   .search:focus { outline:2px solid #1f232822; }
   .focusq { margin:12px 0 4px; padding:10px 12px; border-radius:12px; background:#fff8e6; border:1px solid #f1dfae;
             font-weight:600; font-size:12.5px; }
+  .answerq { margin:6px 0 4px; padding:10px 12px; border-radius:12px; background:#eaf6ee; border:1px solid #bfe3cb;
+            font-weight:500; font-size:12.5px; line-height:1.45; }
   .sec-h { display:flex; justify-content:space-between; color:var(--mute); font-size:11px; font-weight:600;
            letter-spacing:.04em; text-transform:uppercase; margin:16px 2px 6px; }
   .row { display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:10px; cursor:pointer;
@@ -240,6 +242,7 @@ window.MAP = {
   subtitle: "Retired Li-ion battery diagnostics: a review",
   logo: "🔬",
   focus: "What does this review cover — and what gaps does it admit?",
+  answer: "It maps retired-battery health tests and learning methods for scarce data, and concludes the field still needs robust, uncertainty-aware models plus common benchmarks and standard evaluation protocols.",
   howto: [
     "Left → right: why retired batteries are hard → how they are screened and tiered → which health indicators and tests feed the tiers → how ML copes with scarce data → gaps the authors admit → topics a keyword search finds missing.",
     "The last column states plain search facts about the PDF (hits / no hits), not the authors' claims.",
@@ -662,7 +665,7 @@ function App() {
       <input className="search" placeholder="Find a node" value=${q} onInput=${e => { setQ(e.target.value); setSel(null); setGrp(null); }} />
       ${DD ? html`<div className="focusq drillq">🔍 ${DD.title}
           <button className="pbtn" style=${{ marginTop: 8, display: "block" }} onClick=${() => openDrill(null)}>← Back to the main map</button></div>`
-        : html`<div className="focusq">❓ ${M.focus}</div>`}
+        : html`<div className="focusq">❓ ${M.focus}</div>${M.answer ? html`<div className="answerq">💡 ${M.answer}</div>` : null}`}
       <div className="sec-h"><span>Layers</span><span>${N.filter(n => lay.colOf[n.id] !== undefined).length}</span></div>
       ${LC.map((c, i) => html`<div key=${hk + i} className=${"row " + (hidden[hk + i] ? "off" : "")} onClick=${() => setHidden(h => ({ ...h, [hk + i]: !h[hk + i] }))}>
           <span className="dot" style=${{ background: c.color }}></span>${shortTitle(c.title)}<span className="cnt">${N.filter(n => lay.colOf[n.id] === i).length}</span></div>`)}
