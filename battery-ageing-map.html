@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Battery ageing map · Edge 2021 × Attia 2022</title>
+<title>① Mechanisms · Edge 2021 × Attia 2022</title>
 <link rel="stylesheet" href="https://esm.sh/@xyflow/react@12.3.6/dist/style.css">
 <script type="importmap">
 { "imports": {
@@ -116,30 +116,115 @@
     .shell { flex-direction:column; } .canvas { min-height:56vh; }
     .side { width:auto; max-height:24vh; border-right:0; border-bottom:1px solid var(--line); }
     .detail { width:auto; max-height:30vh; border-left:0; border-top:1px solid var(--line); } }
+  .c.lim { background:#fff4e0; color:#9a5b00; }
+  .step { display:flex; gap:8px; align-items:flex-start; }
+  .num { width:20px; height:20px; border-radius:50%; background:#1f2328; color:#fff; font-size:11px; font-weight:700;
+               display:grid; place-items:center; flex-shrink:0; margin-top:1px; }
+  .side, .detail { position:relative; }
+  .side.closed, .detail.closed { display:none; }
+  .fold { position:absolute; top:10px; right:10px; width:26px; height:26px; border-radius:8px; border:1px solid var(--line);
+          background:#fff; color:var(--mute); cursor:pointer; font-size:14px; line-height:1; z-index:2; }
+  .fold.r { right:auto; left:auto; right:10px; }
+  .brand { padding-right:30px; }
+  .detail h2:first-of-type, .detail .kicker { padding-right:30px; }
+  .term { font-size:12.5px; margin:5px 0; line-height:1.4; }
+  .term b { font-weight:650; }
+  .terms { background:#fbfaf6; }
+  .gloss summary { cursor:pointer; list-style:none; }
+  .gloss summary::-webkit-details-marker { display:none; }
+  .gloss[open] summary { margin-bottom:6px; }
+  @media (max-width: 900px) { .side.closed, .detail.closed { display:none; } }
+
 </style>
 </head>
 <body>
 <div id="root"></div>
-<script type="module">
-import React, { useMemo, useState, useCallback, useEffect } from "react";
-import { createRoot } from "react-dom/client";
-import { ReactFlow, Background, Controls, Handle, Position, MarkerType, useNodesState, useReactFlow,
-         ReactFlowProvider } from "@xyflow/react";
-import htm from "htm";
-const html = htm.bind(React.createElement);
+<script>
+// Shared glossary for all battery-paper graphs. term = shown name; aka = other spellings matched in card text;
+// cs = case-sensitive match (for short abbreviations that clash with ordinary words).
+window.GLOSSARY_BASE = [
+  // ── battery basics
+  { term: "SoH", aka: ["SOH", "state of health", "state-of-health"], def: "State of health: how much capability a battery keeps, usually measured capacity ÷ a reference capacity (rated or first-cycle). Only meaningful together with its reference and test conditions." },
+  { term: "SOC", aka: ["SoC", "state of charge"], def: "State of charge: how full the battery is right now, as a % of its current capacity. Not the same as SoH: a worn battery can be 100% full." },
+  { term: "RUL", aka: ["remaining useful life"], def: "Remaining useful life: how many cycles or years are left before the battery reaches its end-of-life threshold." },
+  { term: "EOL", aka: ["end of life", "end-of-life"], def: "End of life: the point where a battery is retired from its job; for EVs often defined as 80% of nominal capacity." },
+  { term: "C-rate", aka: ["C rate"], def: "Current relative to capacity: 1C fully charges/discharges in about 1 hour, 2C in about 30 minutes, 0.5C in about 2 hours." },
+  { term: "Capacity fade", aka: ["capacity loss"], def: "Loss of the charge (Ah) a battery can store; the most common health signal." },
+  { term: "Power fade", def: "Loss of how fast a battery can deliver energy, mainly from rising internal resistance." },
+  { term: "Impedance", aka: ["internal resistance", "resistance growth"], def: "Opposition to current inside the cell. Higher impedance = more voltage drop, more heat, less power." },
+  { term: "OCV", aka: ["open-circuit voltage"], def: "Open-circuit voltage: the cell voltage at rest with no current; linked to SOC." },
+  { term: "PE", cs: true, def: "Positive electrode (the cathode during discharge), e.g. NMC, LFP." },
+  { term: "NE", cs: true, def: "Negative electrode (the anode during discharge), usually graphite, sometimes with silicon." },
+  { term: "NMC", def: "Lithium nickel manganese cobalt oxide cathode: high energy, common in EVs." },
+  { term: "LFP", def: "Lithium iron phosphate cathode: cheaper, safer and longer-lived, lower energy density." },
+  { term: "LMO", def: "Lithium manganese oxide cathode: low cost, good power, shorter life." },
+  { term: "NCA", def: "Lithium nickel cobalt aluminium oxide cathode: high energy (used e.g. in some Tesla cells)." },
+  { term: "LCO", def: "Lithium cobalt oxide cathode: common in phones and laptops." },
+  { term: "Cell / module / pack", aka: ["module", "modules", "pack", "packs"], def: "Cell = one battery unit; module = a group of connected cells; pack = modules plus electronics and cooling, as installed in a vehicle." },
+  { term: "Calendar ageing", aka: ["calendar aging"], def: "Degradation while the battery rests, driven by time, temperature and SOC." },
+  { term: "Accelerated ageing", aka: ["accelerated aging", "accelerated test", "accelerated tests"], def: "Lab tests with harsher conditions (heat, high current) to age cells faster. Can create failure modes that real use doesn't." },
+  { term: "Cell-to-cell variation", aka: ["cell-to-cell", "cell variation"], def: "Nominally identical cells age differently because of small manufacturing and usage differences." },
+  { term: "Second life", aka: ["second-life", "reuse", "repurposing", "repurposed"], def: "Reusing a retired EV battery in a gentler job (e.g. stationary storage) before recycling it." },
+  { term: "Battery passport", aka: ["passport", "passports"], def: "A digital record of a battery's identity, materials and health. Required by the EU Battery Regulation 2023/1542 for EV and large industrial batteries from 2027." },
+  { term: "Regrouping", aka: ["regroup"], def: "Combining retired cells or modules with similar health into new packs, so one weak cell doesn't limit the group." },
+  { term: "Pyro / hydro / direct recycling", aka: ["pyrometallurgy", "hydrometallurgy", "direct recycling", "pyro", "hydro"], def: "Pyrometallurgy = smelting; hydrometallurgy = dissolving metals with chemicals; direct recycling = repairing the cathode material while keeping its structure." },
 
-/* ───────── content ─────────
-   Pages: Edge = journal pages (PCCP 23, 8200–8221). Attia = arXiv v1 PDF pages (2201.02891).
-   Knee types (Attia Fig. 6, p. 14): ❄️ snowball · 🙈 hidden · 🚪 threshold. */
-const COLS = [
-  { key:"mech", title:"① Mechanisms", hint:"what happens inside (Edge)", color:"var(--mech)", tint:"#fdecef" },
-  { key:"sec",  title:"② Secondary mechanisms", hint:"knock-on effects (Edge Fig. 9)", color:"var(--sec)", tint:"#fdf0e5" },
-  { key:"mode", title:"③ Degradation modes", hint:"what electrical tests can infer", color:"var(--mode)", tint:"#e8f0f8" },
-  { key:"path", title:"④ Knee pathways", hint:"how fade suddenly speeds up (Attia)", color:"var(--path)", tint:"#f0ebfa" },
-  { key:"eff",  title:"⑤ Effects", hint:"what the user sees", color:"var(--eff)", tint:"#e7f4ec" },
+  // ── degradation
+  { term: "SEI", aka: ["solid electrolyte interphase"], def: "Solid electrolyte interphase: a thin film on the negative electrode. It protects the cell but keeps growing, consuming lithium and electrolyte." },
+  { term: "Lithium plating", aka: ["plating"], def: "Lithium metal deposits on the electrode surface instead of entering it; favoured by fast charging, cold and high SOC. Can grow dendrites." },
+  { term: "LLI", aka: ["loss of lithium inventory", "lost lithium"], def: "Loss of lithium inventory: less cyclable lithium left to shuttle between electrodes." },
+  { term: "LAM", aka: ["LAM-NE", "LAM-PE", "loss of active material"], def: "Loss of active material: electrode material that can no longer store lithium (cracked, isolated or degraded); -NE / -PE says which electrode." },
+  { term: "Knee", aka: ["knee point", "knees", "knee-point"], def: "The point where capacity fade suddenly speeds up after a slower phase." },
+  { term: "Resistance elbow", aka: ["elbow"], def: "The point where resistance starts rising fast; usually appears with or after the capacity knee." },
+  { term: "Degradation mode", aka: ["degradation modes", "mode diagnosis"], def: "What electrical tests can infer (LLI, LAM, resistance), as opposed to the chemical mechanism behind it." },
+
+  // ── tests
+  { term: "CCCV", aka: ["CC-CV", "constant current constant voltage"], def: "Constant current, then constant voltage: the standard, slow (hours) way to measure true capacity." },
+  { term: "HPPC", aka: ["hybrid pulse power characterization"], def: "Hybrid pulse power characterisation: a standard sequence of current pulses at several SOC levels to measure resistance and power. Slow when run in full." },
+  { term: "Pulse test", aka: ["pulse", "pulses", "pulse injection", "short pulse"], def: "A few milliseconds to seconds of current; the voltage response reveals resistance and health. Fast and non-destructive." },
+  { term: "DCIR", aka: ["direct-current internal resistance"], def: "Direct-current internal resistance, computed from the voltage drop during a current pulse." },
+  { term: "EIS", aka: ["electrochemical impedance spectroscopy", "impedance spectroscopy"], def: "Electrochemical impedance spectroscopy: small AC signals at many frequencies; separates resistance contributions but needs a model to interpret." },
+  { term: "ICA / DVA", aka: ["ICA", "DVA", "dQ/dV", "dV/dQ", "incremental capacity"], def: "Incremental capacity (dQ/dV) and differential voltage (dV/dQ) analysis: peaks in slow charge curves shift as lithium or active material is lost, so LLI and LAM can be estimated." },
+  { term: "Coulometry", aka: ["HP coulometry", "coulombic efficiency"], def: "Precise counting of charge in vs out; small losses each cycle reveal side reactions." },
+
+  // ── ML & statistics
+  { term: "MAPE", aka: ["mean absolute percentage error"], def: "Mean absolute percentage error: average |error| ÷ true value. 5% MAPE on SoH 0.80 ≈ ±0.04." },
+  { term: "RMSE", aka: ["RMSPE", "root mean square error"], def: "Root mean square (percentage) error: like an average error, but punishes large errors more." },
+  { term: "MAE", aka: ["mean absolute error"], def: "Mean absolute error: the average size of the errors, in the target's units." },
+  { term: "R²", aka: ["R2", "R^2"], def: "Coefficient of determination: share of the variation explained by a fit (1 = perfect)." },
+  { term: "OOD", aka: ["out-of-distribution", "domain shift"], def: "Out-of-distribution: test data come from conditions the model never saw in training (e.g. a new SOC or chemistry), so accuracy can drop." },
+  { term: "Interpolation / extrapolation", aka: ["interpolation", "extrapolation", "interpolate", "extrapolate"], def: "Predicting inside the range of training conditions (interpolation) vs outside it (extrapolation, much harder)." },
+  { term: "VAE", aka: ["variational autoencoder", "autoencoder"], def: "Variational autoencoder: a generative model that compresses data into a small random 'latent' code and learns to decode new, realistic samples from it." },
+  { term: "Latent space", aka: ["latent"], def: "The compressed internal representation a model learns; nearby points decode to similar data." },
+  { term: "Cross-attention", aka: ["attention"], def: "A neural-network layer that lets one input (e.g. pulse features) focus on the parts of another input (e.g. SOC condition) that matter." },
+  { term: "Random forest", aka: ["RF"], def: "An ensemble of decision trees whose predictions are averaged; strong on tabular features, but its uncertainty estimates can be over-confident." },
+  { term: "Gaussian process", aka: ["GPR", "GP regression"], def: "A Bayesian regression method that gives a prediction plus a principled uncertainty band; slow on large data." },
+  { term: "Bayesian ridge", aka: ["BRR"], def: "Linear regression with a Bayesian prior on the weights; simple, gives uncertainty." },
+  { term: "Ensemble", aka: ["deep ensemble", "ensembles"], def: "Several models trained separately and combined; their disagreement gives an uncertainty estimate." },
+  { term: "Calibration", aka: ["calibrated", "over-confident", "overconfident"], def: "A model is well calibrated if its 90% intervals contain the truth about 90% of the time. Over-confident = intervals too narrow." },
+  { term: "Confidence interval", aka: ["confidence bounds", "uncertainty band"], def: "A range around a prediction that should contain the true value with a stated probability." },
+  { term: "Feature engineering", aka: ["features", "feature extraction", "feature selection"], def: "Turning raw signals (e.g. voltage curves) into a few informative numbers a model can use; selection keeps only the useful ones." },
+  { term: "Adversarial examples", aka: ["adversarial", "FGSM"], def: "Slightly perturbed inputs used in training to make a model robust to small changes (FGSM = fast gradient sign method)." },
+  { term: "Transfer learning", aka: ["domain adaptation"], def: "Reusing a model trained on one dataset/condition for another, with little new data." },
+  { term: "Synthetic data", aka: ["generated data", "data augmentation", "augmentation"], def: "Data produced by a model or simulation instead of measured; useful for training but not a real measurement." },
+  { term: "Physics-based model", aka: ["physics-based", "P2D", "SPM", "electrochemical model"], def: "A model built from battery physics and chemistry equations; explains behaviour but is hard to parameterise." },
+  { term: "Empirical model", aka: ["empirical"], def: "A curve fitted to observed ageing data (e.g. fade vs time and temperature) without modelling the internal physics." },
+  { term: "Hybrid model", aka: ["hybrid approach", "hybrid approaches", "hybrids", "physics-informed", "physics + ML"], def: "Combines physics-based and data-driven (ML) parts, aiming for accuracy plus generalisation." },
+  { term: "Federated learning", aka: ["federated"], def: "Training one model across several sites without sharing their raw data." },
+  { term: "KL divergence", aka: ["Kullback-Leibler"], def: "A measure of how different two probability distributions are (0 = identical)." },
 ];
-const X = [0, 330, 660, 990, 1320], Y0 = 70, DY = 128;
 
+</script>
+<script>
+// Battery ageing map: Edge et al. 2021 (journal pages, PCCP 23, 8200–8221) × Attia et al. 2022 (arXiv v1 PDF pages).
+// Knee types (Attia Fig. 6, p. 14): ❄️ snowball · 🙈 hidden · 🚪 threshold.
+const COLS = [
+  { key:"mech", title:"① Mechanisms", hint:"what happens inside (Edge)", color:"#d9485f", tint:"#fdecef" },
+  { key:"sec",  title:"② Secondary mechanisms", hint:"knock-on effects (Edge Fig. 9)", color:"#e8833a", tint:"#fdf0e5" },
+  { key:"mode", title:"③ Degradation modes", hint:"what electrical tests can infer", color:"#3e7cb1", tint:"#e8f0f8" },
+  { key:"path", title:"④ Knee pathways", hint:"how fade suddenly speeds up (Attia)", color:"#7a5cc2", tint:"#f0ebfa" },
+  { key:"eff",  title:"⑤ Effects", hint:"what the user sees", color:"#2f8f5b", tint:"#e7f4ec" },
+];
 const N = [
   // ① mechanisms
   { id:"sei", col:0, row:0, icon:"🧪", title:"SEI growth", sub:"Mechanism · negative electrode", papers:["Edge","Attia"],
@@ -242,8 +327,6 @@ const N = [
     note:"Dendrites from plating can pierce the separator and short the cell.",
     src:["Edge p. 8203"] },
 ];
-
-// [source, target, label, kind ("n" | "neg"), loop]
 const E = [
   ["sei","lli","consumes Li","n","R3"], ["sei","imp","thicker film","n"], ["sei","dry","consumes electrolyte","n"],
   ["sei","pore","films clog pores","n","R1"], ["sei","kdep","uses up additive (e.g. FEC)","n"],
@@ -269,40 +352,99 @@ const E = [
   ["kdep","knee","","n"], ["kperc","knee","","n"], ["kmech","knee","","n"],
   ["knee","cap","fade accelerates","n"], ["knee","elbow","elbow follows knee","n"],
 ];
-
 const LOOPS = [
   { id:"R1", kind:"R", color:"#d9485f", name:"Clogged pores → plating", story:"SEI clogs pores → local overcharge → plating → fresh lithium makes more SEI.", src:"Edge p. 8207 · Attia Fig. 9" },
   { id:"R2", kind:"R", color:"#e8833a", name:"Cracks beget cracks", story:"Cracked particles drop out → remaining ones carry more current → more stress → more cracks.", src:"Attia p. 46, Fig. 15" },
   { id:"R3", kind:"R", color:"#7a5cc2", name:"Transition-metal shuttle", story:"PE releases TM → TM speeds NE SEI → lithium lost → windows drift → PE pushed higher → more TM.", src:"Edge pp. 8204, 8207" },
   { id:"R4", kind:"R", color:"#b8860b", name:"Dry-out spiral", story:"Dry patches lose active material → local current rises → electrolyte dries out faster.", src:"Attia p. 34 (Fang et al.)" },
-  { id:"B1", kind:"B", color:"#2b8a8a", name:"Thick skin slows itself", story:"A thicker SEI slows its own growth (≈√time) → sublinear fade. Shown as the B1 badge on SEI.", src:"Attia p. 4" },
+  { id:"B1", kind:"B", single:"sei", color:"#2b8a8a", name:"Thick skin slows itself", story:"A thicker SEI slows its own growth (≈√time) → sublinear fade. Shown as the B1 badge on SEI.", src:"Attia p. 4" },
   { id:"B2", kind:"B", color:"#2b8a8a", name:"Less lithium, less plating", story:"Losing lithium can make plating less likely (dashed link).", src:"Edge Fig. 9, p. 8208" },
 ];
-const loopOf = Object.fromEntries(LOOPS.map(l => [l.id, l]));
-const byId = Object.fromEntries(N.map(n => [n.id, n]));
+window.MAP = {
+  title: "Battery ageing map",
+  subtitle: "Edge 2021 × Attia 2022",
+  logo: "🔋",
+  focus: "Why does a Li-ion cell lose capacity — and why does the fade sometimes suddenly speed up?",
+  howto: ["Left → right: what happens inside → what tests can see → how a knee forms → what the user sees.",
+          "Named loops are our reading of Edge Fig. 9 and Attia's pathway sections."],
+  cols: COLS, X: [0, 330, 660, 990, 1320], nodes: N, edges: E,
+  groups: { label: "🔁 Feedback loops", kind: "loops", items: LOOPS },
+  glossary: [
+    { term: "Snowball", aka: ["❄️"], def: "Knee type: one internal variable feeds itself and grows exponentially (Attia Fig. 5)." },
+    { term: "Hidden", aka: ["🙈"], def: "Knee type: a slow process dominates, then a second, faster one overtakes it (Attia Fig. 5)." },
+    { term: "Threshold", aka: ["🚪", "threshold"], def: "Knee type: a variable creeps up silently until it crosses a limit, then the curve breaks (Attia Fig. 5)." },
+    { term: "Stoichiometric drift", aka: ["drift"], def: "The two electrodes' usable lithium windows slide out of alignment as the cell ages." },
+    { term: "TM dissolution", aka: ["TM", "transition metal", "transition-metal"], def: "Transition metals (Ni, Mn, Co) leaving the positive electrode and depositing on the negative one, speeding up SEI growth." },
+    { term: "CEI", def: "Cathode electrolyte interphase: a film on the positive electrode, the cathode-side cousin of SEI." },
+    { term: "FEC", def: "Fluoroethylene carbonate: an electrolyte additive that helps form a stable SEI, common in silicon-containing cells; when it runs out, fade can accelerate." },
+    { term: "n:p ratio", aka: ["n:p"], def: "Capacity ratio of negative to positive electrode. Too low (NE too small) makes lithium plating likely." },
+    { term: "Percolation", aka: ["percolation-limited"], def: "When a connected network (electrolyte or conductive particles) drops below a critical fraction, connectivity collapses suddenly." },
+    { term: "Path dependence", aka: ["path-dependent"], def: "The order and history of stresses matter, not just their totals." },
+    { term: "Pseudo-knee", aka: ["pseudo-knee"], def: "An apparent knee from resistance pushing the cell to its voltage cutoff early; it depends on the test current." },
+    { term: "Dendrites", aka: ["dendrite"], def: "Needle-like lithium metal growths that can pierce the separator and short the cell." },
+  ],
+  legend: [
+    ['<span class="ln-s"></span>', "leads to / promotes"],
+    ['<span class="ln-d"></span>', "suppresses (balancing)"],
+    ['<span class="ln-l"></span>', "part of a named loop (when selected)"],
+    ["❄️", "snowball: grows exponentially"], ["🙈", "hidden: a 2nd process overtakes"], ["🚪", "threshold: silent creep, then break"],
+    ['<span class="c ok">✓</span>', "bulk state, visible to electrical tests"],
+    ['<span class="c warn">✗</span>', "subtle state, hard to detect (Attia p. 62)"],
+  ],
+  sources: ["Edge et al. 2021, PCCP 23, 8200–8221 (journal pages).",
+            "Attia et al. 2022, J. Electrochem. Soc. 169, 060517 (arXiv v1 PDF pages)."],
+};
 
-/* ───────── nodes / edges ───────── */
-const H = [["l","left",Position.Left],["r","right",Position.Right],["t","top",Position.Top],["b","bottom",Position.Bottom]];
+</script>
+<script type="module">
+// Card-canvas concept graph engine (React Flow + htm). Reads a global MAP object.
+// MAP = { title, subtitle, logo, focus, cols:[{title,hint,color,tint}], X?, Y0?, DY?, nodes:[...], edges:[...],
+//         groups:{ label, kind:"loops"|"route", items:[{id,name,story,src,color?,kind?,nodes?}] },
+//         legend:[[symbolHtml,text]], sources:[...], howto:[...] }
+// node = { id, col, row, icon, title, sub, chips?, badge?, note, src:[...], rq?, papers? }
+// edge = [source, target, label, kind ("n"|"neg"), groupId?]
+import React, { useMemo, useState, useCallback, useEffect } from "react";
+import { createRoot } from "react-dom/client";
+import { ReactFlow, Background, Controls, Handle, Position, MarkerType, useNodesState, useReactFlow,
+         ReactFlowProvider } from "@xyflow/react";
+import htm from "htm";
+const html = htm.bind(React.createElement);
+
+const M = window.MAP;
+const COLS = M.cols, N = M.nodes, E = M.edges, G = M.groups.items;
+const X = M.X || COLS.map((_, i) => i * 330), Y0 = M.Y0 ?? 70, DY = M.DY ?? 128;
+const byId = Object.fromEntries(N.map(n => [n.id, n]));
+const gOf = Object.fromEntries(G.map(g => [g.id, g]));
+const isRoute = M.groups.kind === "route";
+// Glossary = shared base (window.GLOSSARY_BASE) + map-specific (M.glossary); map entries override base ones.
+const GLmap = new Map();
+[...(window.GLOSSARY_BASE || []), ...(M.glossary || [])].forEach(t => GLmap.set(t.term, t));
+const GLall = [...GLmap.values()];
+const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const GLre = GLall.map(t => ({ t, re: new RegExp("(^|[^A-Za-z0-9])(" + [t.term, ...(t.aka || [])].map(esc).join("|") + ")(?![A-Za-z0-9])", t.cs ? "" : "i") }));
+const textOf = n => [n.title, n.sub, n.note, ...(n.chips || [])].join(" ");
+const termsFor = n => GLre.filter(({ re }) => re.test(textOf(n))).map(({ t }) => t);
+const used = new Set(); N.forEach(n => termsFor(n).forEach(t => used.add(t.term)));
+const GL = GLall.filter(t => used.has(t.term)).sort((a, b) => a.term.localeCompare(b.term));
+const chipCls = c => "c" + (c.startsWith("✗") ? " warn" : c.startsWith("✓") ? " ok" : c.startsWith("⚠") ? " lim" : "");
+
+const H = [["l", Position.Left], ["r", Position.Right], ["t", Position.Top], ["b", Position.Bottom]];
 function Card({ data }) {
   const n = data.n, col = COLS[n.col];
   return html`<div className=${"card " + (data.cls || "")}>
-    ${H.map(([k,,p]) => html`<${Handle} key=${k+"s"} id=${k+"s"} type="source" position=${p} />`)}
-    ${H.map(([k,,p]) => html`<${Handle} key=${k+"t"} id=${k+"t"} type="target" position=${p} />`)}
+    ${H.map(([k, p]) => html`<${Handle} key=${k + "s"} id=${k + "s"} type="source" position=${p} />`)}
+    ${H.map(([k, p]) => html`<${Handle} key=${k + "t"} id=${k + "t"} type="target" position=${p} />`)}
     <div className="hd">
       <div className="ic" style=${{ background: col.tint }}>${n.icon}</div>
-      <div style=${{ minWidth:0 }}>
-        <div className="ttl">${n.title}</div>
-        <div className="sub">${n.sub}</div>
-      </div>
-      ${n.badge && html`<div className="badge" title=${n.badge === "B1" ? "Balancing loop B1" : "Knee types: ❄️ snowball · 🙈 hidden · 🚪 threshold"}>${n.badge}</div>`}
+      <div style=${{ minWidth: 0 }}><div className="ttl">${n.title}</div><div className="sub">${n.sub}</div></div>
+      ${n.badge && html`<div className="badge">${n.badge}</div>`}
     </div>
-    ${n.chips && html`<div className="chips">${n.chips.map(c => html`<span key=${c}
-        className=${"c" + (c.startsWith("✗") ? " warn" : c.startsWith("✓") ? " ok" : "")}>${c}</span>`)}</div>`}
+    ${n.chips && html`<div className="chips">${n.chips.map(c => html`<span key=${c} className=${chipCls(c)}>${c}</span>`)}</div>`}
   </div>`;
 }
 function Header({ data }) {
   const c = data.c;
-  return html`<div className="hdr"><span style=${{ color:c.color, display:"inline", fontWeight:700, fontSize:12 }}>●</span> ${c.title}<span>${c.hint}</span></div>`;
+  return html`<div className="hdr"><span style=${{ color: c.color, display: "inline", fontWeight: 700, fontSize: 12 }}>●</span> ${c.title}<span>${c.hint}</span></div>`;
 }
 const nodeTypes = { card: Card, header: Header };
 
@@ -313,166 +455,162 @@ function handlesFor(s, t) {
   return b.row > a.row ? ["bs", "tt"] : ["ts", "bt"];
 }
 const initialNodes = [
-  ...COLS.map((c, i) => ({ id:"h-"+c.key, type:"header", position:{ x:X[i], y:4 }, data:{ c }, draggable:false, selectable:false })),
-  ...N.map(n => ({ id:n.id, type:"card", position:{ x:X[n.col], y:Y0 + n.row * DY }, data:{ n } })),
+  ...COLS.map((c, i) => ({ id: "h-" + i, type: "header", position: { x: X[i], y: 4 }, data: { c, i }, draggable: false, selectable: false })),
+  ...N.map(n => ({ id: n.id, type: "card", position: { x: X[n.col], y: Y0 + n.row * DY }, data: { n } })),
 ];
+const groupNodes = g => {
+  if (!g) return null;
+  if (g.nodes) return new Set(g.nodes);
+  const s = new Set(); E.forEach(([a, b, , , l]) => { if (l === g.id) { s.add(a); s.add(b); } });
+  if (g.single) s.add(g.single);
+  return s;
+};
+const edgeInGroup = (e, g, set) => g.nodes ? (set.has(e[0]) && set.has(e[1])) : e[4] === g.id;
 
-/* ───────── app ───────── */
 function App() {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [nodes, , onNodesChange] = useNodesState(initialNodes);
   const h0 = decodeURIComponent(location.hash.slice(1));
   const [sel, setSel] = useState(byId[h0] ? h0 : null);
-  const [loop, setLoop] = useState(LOOPS.some(l => l.id === h0) ? h0 : null);
+  const [grp, setGrp] = useState(gOf[h0] ? h0 : null);
   const [hidden, setHidden] = useState({});
-  const [paper, setPaper] = useState("All");
   const [q, setQ] = useState("");
   const [showAll, setShowAll] = useState(false);
+  const wide = window.innerWidth >= 1400;
+  const [leftOpen, setLeftOpen] = useState(wide);
+  const [rightOpen, setRightOpen] = useState(wide);
   const rf = useReactFlow();
+  const refit = () => setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 60);
+  useEffect(() => { if ((sel || grp) && !rightOpen) setRightOpen(true); }, [sel, grp]);
 
-  const visible = useCallback(id => {
-    const n = byId[id]; if (!n) return true;
-    return !hidden[COLS[n.col].key];
-  }, [hidden]);
-
+  const visible = useCallback(id => { const n = byId[id]; return !n || !hidden[n.col]; }, [hidden]);
   const hood = useMemo(() => {
     if (!sel) return null;
-    const s = new Set([sel]);
-    E.forEach(([a, b]) => { if (a === sel) s.add(b); if (b === sel) s.add(a); });
-    return s;
+    const s = new Set([sel]); E.forEach(([a, b]) => { if (a === sel) s.add(b); if (b === sel) s.add(a); }); return s;
   }, [sel]);
-  const loopNodes = useMemo(() => {
-    if (!loop) return null;
-    if (loop === "B1") return new Set(["sei"]);
-    const s = new Set(); E.forEach(([a, b, , , l]) => { if (l === loop) { s.add(a); s.add(b); } }); return s;
-  }, [loop]);
+  const gSet = useMemo(() => groupNodes(gOf[grp]), [grp]);
   const hits = useMemo(() => {
     const t = q.trim().toLowerCase(); if (!t) return null;
     return new Set(N.filter(n => (n.title + " " + n.sub + " " + n.note).toLowerCase().includes(t)).map(n => n.id));
   }, [q]);
 
   const shownNodes = nodes.map(nd => {
-    if (nd.type === "header") return { ...nd, hidden: !!hidden[nd.data.c.key] };
-    const n = byId[nd.id];
+    if (nd.type === "header") return { ...nd, hidden: !!hidden[nd.data.i] };
     let cls = "";
     if (hood) cls = nd.id === sel ? "focus" : hood.has(nd.id) ? "" : "dim";
-    else if (loopNodes) cls = loopNodes.has(nd.id) ? "" : "dim";
+    else if (gSet) cls = gSet.has(nd.id) ? "" : "dim";
     else if (hits) cls = hits.has(nd.id) ? "hit" : "dim";
-    else if (paper !== "All" && !n.papers.includes(paper)) cls = "dim";
     return { ...nd, hidden: !visible(nd.id), data: { ...nd.data, cls } };
   });
 
-  const edges = E.filter(([a, b]) => visible(a) && visible(b)).map(([a, b, label, kind, l], i) => {
+  const g = gOf[grp];
+  const edges = E.filter(([a, b]) => visible(a) && visible(b)).map((e, i) => {
+    const [a, b, label, kind, l] = e;
     const [sh, th] = handlesFor(a, b);
     const inHood = hood && (a === sel || b === sel);
-    const inLoop = loop && l === loop;
-    const active = inHood || inLoop;
-    const faded = (hood && !inHood) || (loop && !inLoop) || (hits && !(hits.has(a) && hits.has(b)))
-               || (!hood && !loop && !hits && paper !== "All" && !(byId[a].papers.includes(paper) && byId[b].papers.includes(paper)));
-    const color = inLoop ? loopOf[l].color : kind === "neg" ? "#2b8a8a" : active ? "#1f2328" : "#b9bec5";
+    const inG = g && edgeInGroup(e, g, gSet);
+    const active = inHood || inG;
+    const faded = (hood && !inHood) || (g && !inG) || (hits && !(hits.has(a) && hits.has(b)));
+    const gc = g && (g.color || "#1f2328");
+    const color = inG ? gc : kind === "neg" ? "#2b8a8a" : active ? "#1f2328" : "#b9bec5";
     return {
       id: "e" + i, source: a, target: b, sourceHandle: sh, targetHandle: th, type: "default",
-      label: active && label ? label : undefined, labelBgPadding: [4, 2], labelBgBorderRadius: 4,
-      animated: !!active,
+      label: active && label ? label : undefined, labelBgPadding: [4, 2], labelBgBorderRadius: 4, animated: !!active,
       style: { stroke: color, strokeWidth: active ? 2.4 : 1.2, opacity: faded ? 0.07 : active ? 1 : (showAll ? 0.6 : 0.13),
                strokeDasharray: kind === "neg" ? "5 4" : undefined },
-      markerEnd: { type: MarkerType.ArrowClosed, color, width: 16, height: 16 },
-      zIndex: active ? 10 : 0,
+      markerEnd: { type: MarkerType.ArrowClosed, color, width: 16, height: 16 }, zIndex: active ? 10 : 0,
     };
   });
 
-  const pick = id => { setLoop(null); setSel(id); };
-  const counts = COLS.map((c, i) => N.filter(n => n.col === i).length);
-  useEffect(() => { const t = setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 50); return () => clearTimeout(t); }, [hidden]);
+  const pick = id => { setGrp(null); setSel(id); };
+  useEffect(() => { const t = setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 60); return () => clearTimeout(t); }, [hidden, leftOpen, rightOpen]);
 
   const sn = sel && byId[sel];
   const ins = sn ? E.filter(e => e[1] === sel) : [], outs = sn ? E.filter(e => e[0] === sel) : [];
-  const L = (e, other) => html`<div className="link" key=${e[0]+e[1]} onClick=${() => pick(other)}>
+  const L = (e, other) => html`<div className="link" key=${e[0] + e[1]} onClick=${() => pick(other)}>
       <span>${byId[other].icon}</span><span className="ln">${byId[other].title}</span>
       ${e[2] && html`<span className="lr">— ${e[2]}</span>`}
-      ${e[4] && html`<span className="loop"><span className="tag" style=${{ background: loopOf[e[4]].color }}>${e[4]}</span></span>`}
+      ${e[4] && gOf[e[4]] && html`<span className="loop"><span className="tag" style=${{ background: gOf[e[4]].color }}>${e[4]}</span></span>`}
     </div>`;
+  const tagOf = (it, idx) => isRoute
+    ? html`<span className="num">${idx + 1}</span>`
+    : html`<span className="tag" style=${{ background: it.color }}>${it.id}</span>`;
 
   return html`<div className="app"><div className="shell">
-    <aside className="side">
-      <div className="brand"><div className="logo">🔋</div><div><b>Battery ageing map</b><span>Edge 2021 × Attia 2022</span></div></div>
-      <input className="search" placeholder="Find a node" value=${q} onInput=${e => { setQ(e.target.value); setSel(null); setLoop(null); }} />
-      <div className="focusq">❓ Why does a Li-ion cell lose capacity — and why does the fade sometimes suddenly speed up?</div>
-
+    <aside className=${"side" + (leftOpen ? "" : " closed")}>
+      <button className="fold" title="Hide panel" onClick=${() => setLeftOpen(false)}>«</button>
+      <div className="brand"><div className="logo">${M.logo}</div><div><b>${M.title}</b><span>${M.subtitle}</span></div></div>
+      <input className="search" placeholder="Find a node" value=${q} onInput=${e => { setQ(e.target.value); setSel(null); setGrp(null); }} />
+      <div className="focusq">❓ ${M.focus}</div>
       <div className="sec-h"><span>Layers</span><span>${N.length}</span></div>
-      ${COLS.map((c, i) => html`<div key=${c.key} className=${"row " + (hidden[c.key] ? "off" : "")}
-          onClick=${() => setHidden(h => ({ ...h, [c.key]: !h[c.key] }))}>
-          <span className="dot" style=${{ background: c.color }}></span>${c.title.slice(2)}<span className="cnt">${counts[i]}</span></div>`)}
-
-      <div className="sec-h"><span>Feedback loops</span><span>${LOOPS.length}</span></div>
-      ${LOOPS.map(l => html`<div key=${l.id} className=${"row loop " + (loop === l.id ? "on" : "")}
-          onClick=${() => { setSel(null); setQ(""); setLoop(loop === l.id ? null : l.id); }}>
-          <div className="lt"><span className="tag" style=${{ background: l.color }}>${l.id}</span>${l.name}</div>
-          <div className="ls">${l.story}</div></div>`)}
-
-      <div className="sec-h"><span>Paper</span></div>
-      <div className="pill">${["All", "Edge", "Attia"].map(p => html`<button key=${p} className=${"pbtn " + (paper === p ? "on" : "")}
-          onClick=${() => setPaper(p)}>${p}</button>`)}</div>
+      ${COLS.map((c, i) => html`<div key=${i} className=${"row " + (hidden[i] ? "off" : "")} onClick=${() => setHidden(h => ({ ...h, [i]: !h[i] }))}>
+          <span className="dot" style=${{ background: c.color }}></span>${c.title.replace(/^\S+\s/, "")}<span className="cnt">${N.filter(n => n.col === i).length}</span></div>`)}
+      <div className="sec-h"><span>${M.groups.label}</span><span>${G.length}</span></div>
+      ${G.map((it, idx) => html`<div key=${it.id} className=${"row loop " + (grp === it.id ? "on" : "")}
+          onClick=${() => { setSel(null); setQ(""); setGrp(grp === it.id ? null : it.id); }}>
+          <div className="lt">${tagOf(it, idx)}${it.name}</div><div className="ls">${it.story}</div></div>`)}
     </aside>
 
     <main className="canvas">
       <div className="topbar">
-        <span className="chip"><b>${N.length}</b> concepts · <b>${E.length}</b> links · <b>${LOOPS.length}</b> loops</span>
-        ${(sel || loop || q) && html`<button className="btn ghost" onClick=${() => { setSel(null); setLoop(null); setQ(""); }}>✕ Clear</button>`}
-        <button className=${"btn ghost" + (showAll ? "" : "")} style=${{ marginLeft:"auto" }} onClick=${() => setShowAll(v => !v)}>${showAll ? "🔇 Quiet links" : "🕸️ Show all links"}</button>
-        <button className="btn" style=${{ marginLeft:0 }} onClick=${() => rf.fitView({ padding: 0.08, duration: 300 })}>⤢ Fit view</button>
+        ${!leftOpen && html`<button className="btn ghost" title="Show side panel" onClick=${() => setLeftOpen(true)}>☰ ${M.title}</button>`}
+        <span className="chip"><b>${N.length}</b> concepts · <b>${E.length}</b> links</span>
+        ${(sel || grp || q) && html`<button className="btn ghost" onClick=${() => { setSel(null); setGrp(null); setQ(""); }}>✕ Clear</button>`}
+        <button className="btn ghost" style=${{ marginLeft: "auto" }} onClick=${() => setShowAll(v => !v)}>${showAll ? "🔇 Quiet links" : "🕸️ Show all links"}</button>
+        <button className="btn" style=${{ marginLeft: 0 }} onClick=${() => rf.fitView({ padding: 0.08, duration: 300 })}>⤢ Fit</button>
+        ${!rightOpen && html`<button className="btn ghost" style=${{ marginLeft: 0 }} title="Show details" onClick=${() => setRightOpen(true)}>ⓘ Details</button>`}
       </div>
       <${ReactFlow} nodes=${shownNodes} edges=${edges} nodeTypes=${nodeTypes} onNodesChange=${onNodesChange}
-        onNodeClick=${(_, n) => n.type === "card" && pick(n.id === sel ? null : n.id)}
-        onPaneClick=${() => { setSel(null); }} fitView fitViewOptions=${{ padding: 0.08 }}
-        minZoom=${0.2} maxZoom=${2} nodesConnectable=${false} proOptions=${{ hideAttribution: true }}>
+        onNodeClick=${(_, n) => n.type === "card" && pick(n.id === sel ? null : n.id)} onPaneClick=${() => setSel(null)}
+        fitView fitViewOptions=${{ padding: 0.08 }} minZoom=${0.2} maxZoom=${2} nodesConnectable=${false} proOptions=${{ hideAttribution: true }}>
         <${Background} variant="dots" gap=${18} size=${1.2} color="#d9d6cf" />
         <${Controls} showInteractive=${false} position="bottom-right" />
       </${ReactFlow}>
     </main>
 
-    <aside className="detail">
+    <aside className=${"detail" + (rightOpen ? "" : " closed")}>
+      <button className="fold r" title="Hide panel" onClick=${() => setRightOpen(false)}>»</button>
       ${sn ? html`<div>
-          <div className="kicker"><span className="dot" style=${{ display:"inline-block", background: COLS[sn.col].color, marginRight:6 }}></span>${COLS[sn.col].title.slice(2)}</div>
+          <div className="kicker"><span className="dot" style=${{ display: "inline-block", background: COLS[sn.col].color, marginRight: 6 }}></span>${COLS[sn.col].title.replace(/^\S+\s/, "")}</div>
           <h2>${sn.icon} ${sn.title}</h2>
-          <div className="muted">${sn.sub}${sn.badge && sn.col === 3 ? " · " + sn.badge : ""}</div>
+          <div className="muted">${sn.sub}</div>
           <p>${sn.note}</p>
-          ${sn.chips && html`<div className="chips">${sn.chips.map(c => html`<span key=${c} className="c">${c}</span>`)}</div>`}
+          ${sn.chips && html`<div className="chips">${sn.chips.map(c => html`<span key=${c} className=${chipCls(c)}>${c}</span>`)}</div>`}
+          ${termsFor(sn).length > 0 && html`<div className="box terms"><h4>📖 Terms</h4>${termsFor(sn).map(t => html`<div key=${t.term} className="term"><b>${t.term}</b> — ${t.def}</div>`)}</div>`}
+          ${sn.rq && html`<div className="box rq"><h4>🎯 For our review</h4>${sn.rq}</div>`}
           ${ins.length > 0 && html`<div className="box"><h4>Fed by</h4>${ins.map(e => L(e, e[0]))}</div>`}
           ${outs.length > 0 && html`<div className="box"><h4>Leads to</h4>${outs.map(e => L(e, e[1]))}</div>`}
-          <div className="box"><h4>📄 Where in the papers</h4>${sn.src.map(s => html`<div key=${s} className="src">• ${s}</div>`)}</div>
+          <div className="box"><h4>📄 Where in the paper</h4>${sn.src.map(s => html`<div key=${s} className="src">• ${s}</div>`)}</div>
         </div>`
-      : loop ? html`<div>
-          <div className="kicker">${loopOf[loop].kind === "R" ? "Reinforcing loop (vicious circle)" : "Balancing loop (slows itself)"}</div>
-          <h2><span className="tag" style=${{ background: loopOf[loop].color, color:"#fff", borderRadius:6, padding:"1px 7px", fontSize:13 }}>${loop}</span> ${loopOf[loop].name}</h2>
-          <p>${loopOf[loop].story}</p>
-          <div className="box"><h4>📄 Source</h4><div className="src">${loopOf[loop].src}</div></div>
-          <p className="muted">Loops are why Edge calls degradation path-dependent and why Attia's snowball knees exist: a small push can grow by itself.</p>
+      : g ? html`<div>
+          <div className="kicker">${isRoute ? "Read-together route · step " + (G.indexOf(g) + 1) + " of " + G.length : g.kind === "B" ? "Balancing loop (slows itself)" : "Reinforcing loop (vicious circle)"}</div>
+          <h2>${g.name}</h2>
+          <p>${g.story}</p>
+          ${g.detail && html`<p className="muted">${g.detail}</p>`}
+          <div className="box"><h4>📄 Where</h4><div className="src">${g.src}</div></div>
+          ${isRoute && html`<div className="pill">
+            ${G.indexOf(g) > 0 && html`<button className="pbtn" onClick=${() => setGrp(G[G.indexOf(g) - 1].id)}>← Back</button>`}
+            ${G.indexOf(g) < G.length - 1 && html`<button className="pbtn on" onClick=${() => setGrp(G[G.indexOf(g) + 1].id)}>Next step →</button>`}
+          </div>`}
         </div>`
       : html`<div>
-          <h2 style=${{ marginTop:0 }}>How to read</h2>
-          <p className="muted">Left → right: what happens inside → what tests can see → how a knee forms → what the user sees.</p>
+          <h2 style=${{ marginTop: 0 }}>How to read</h2>
+          ${M.howto.map((t, i) => html`<p key=${i} className="muted">${t}</p>`)}
           <div className="box"><h4>Try</h4>
             <div>• <b>Click a card</b> to trace what feeds it and what it feeds</div>
-            <div>• <b>Click a loop</b> on the left to light up one vicious circle</div>
+            <div>• <b>${isRoute ? "Click step 1" : "Click a loop"}</b> on the left${isRoute ? " and follow Next →" : " to light it up"}</div>
             <div>• Hide layers to simplify; drag cards freely</div></div>
           <div className="box"><h4>Legend</h4><div className="legend">
-            <span className="ln-s"></span><span>leads to / promotes</span>
-            <span className="ln-d"></span><span>suppresses (balancing)</span>
-            <span className="ln-l"></span><span>part of a named loop (when selected)</span>
-            <span>❄️</span><span>snowball: grows exponentially</span>
-            <span>🙈</span><span>hidden: a 2nd process overtakes</span>
-            <span>🚪</span><span>threshold: silent creep, then break</span>
-            <span className="c ok" style=${{ fontSize:10 }}>✓</span><span>bulk state, visible to electrical tests</span>
-            <span className="c warn" style=${{ fontSize:10 }}>✗</span><span>subtle state, hard to detect (Attia p. 62)</span>
+            ${M.legend.map(([sym, txt], i) => html`<${React.Fragment} key=${i}><span dangerouslySetInnerHTML=${{ __html: sym }}></span><span>${txt}</span></${React.Fragment}>`)}
           </div></div>
-          <div className="box"><h4>Sources</h4><div className="src">Edge et al. 2021, PCCP 23, 8200–8221 (journal pages).<br />
-            Attia et al. 2022, J. Electrochem. Soc. 169, 060517 (arXiv v1 PDF pages).<br />
-            Named loops are our reading of Edge Fig. 9 and Attia's pathway sections.</div></div>
+          <details className="box gloss"><summary><h4 style=${{ display: "inline" }}>📖 Glossary (${GL.length})</h4></summary>
+            ${GL.map(t => html`<div key=${t.term} className="term"><b>${t.term}</b> — ${t.def}</div>`)}</details>
+          <div className="box"><h4>Sources</h4>${M.sources.map((s, i) => html`<div key=${i} className="src">${s}</div>`)}</div>
         </div>`}
     </aside>
   </div></div>`;
 }
 createRoot(document.getElementById("root")).render(html`<${ReactFlowProvider}><${App} /></${ReactFlowProvider}>`);
+
 </script>
 </body>
 </html>

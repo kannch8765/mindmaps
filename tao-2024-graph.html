@@ -120,11 +120,101 @@
   .step { display:flex; gap:8px; align-items:flex-start; }
   .num { width:20px; height:20px; border-radius:50%; background:#1f2328; color:#fff; font-size:11px; font-weight:700;
                display:grid; place-items:center; flex-shrink:0; margin-top:1px; }
+  .side, .detail { position:relative; }
+  .side.closed, .detail.closed { display:none; }
+  .fold { position:absolute; top:10px; right:10px; width:26px; height:26px; border-radius:8px; border:1px solid var(--line);
+          background:#fff; color:var(--mute); cursor:pointer; font-size:14px; line-height:1; z-index:2; }
+  .fold.r { right:auto; left:auto; right:10px; }
+  .brand { padding-right:30px; }
+  .detail h2:first-of-type, .detail .kicker { padding-right:30px; }
+  .term { font-size:12.5px; margin:5px 0; line-height:1.4; }
+  .term b { font-weight:650; }
+  .terms { background:#fbfaf6; }
+  .gloss summary { cursor:pointer; list-style:none; }
+  .gloss summary::-webkit-details-marker { display:none; }
+  .gloss[open] summary { margin-bottom:6px; }
+  @media (max-width: 900px) { .side.closed, .detail.closed { display:none; } }
 
 </style>
 </head>
 <body>
 <div id="root"></div>
+<script>
+// Shared glossary for all battery-paper graphs. term = shown name; aka = other spellings matched in card text;
+// cs = case-sensitive match (for short abbreviations that clash with ordinary words).
+window.GLOSSARY_BASE = [
+  // ── battery basics
+  { term: "SoH", aka: ["SOH", "state of health", "state-of-health"], def: "State of health: how much capability a battery keeps, usually measured capacity ÷ a reference capacity (rated or first-cycle). Only meaningful together with its reference and test conditions." },
+  { term: "SOC", aka: ["SoC", "state of charge"], def: "State of charge: how full the battery is right now, as a % of its current capacity. Not the same as SoH: a worn battery can be 100% full." },
+  { term: "RUL", aka: ["remaining useful life"], def: "Remaining useful life: how many cycles or years are left before the battery reaches its end-of-life threshold." },
+  { term: "EOL", aka: ["end of life", "end-of-life"], def: "End of life: the point where a battery is retired from its job; for EVs often defined as 80% of nominal capacity." },
+  { term: "C-rate", aka: ["C rate"], def: "Current relative to capacity: 1C fully charges/discharges in about 1 hour, 2C in about 30 minutes, 0.5C in about 2 hours." },
+  { term: "Capacity fade", aka: ["capacity loss"], def: "Loss of the charge (Ah) a battery can store; the most common health signal." },
+  { term: "Power fade", def: "Loss of how fast a battery can deliver energy, mainly from rising internal resistance." },
+  { term: "Impedance", aka: ["internal resistance", "resistance growth"], def: "Opposition to current inside the cell. Higher impedance = more voltage drop, more heat, less power." },
+  { term: "OCV", aka: ["open-circuit voltage"], def: "Open-circuit voltage: the cell voltage at rest with no current; linked to SOC." },
+  { term: "PE", cs: true, def: "Positive electrode (the cathode during discharge), e.g. NMC, LFP." },
+  { term: "NE", cs: true, def: "Negative electrode (the anode during discharge), usually graphite, sometimes with silicon." },
+  { term: "NMC", def: "Lithium nickel manganese cobalt oxide cathode: high energy, common in EVs." },
+  { term: "LFP", def: "Lithium iron phosphate cathode: cheaper, safer and longer-lived, lower energy density." },
+  { term: "LMO", def: "Lithium manganese oxide cathode: low cost, good power, shorter life." },
+  { term: "NCA", def: "Lithium nickel cobalt aluminium oxide cathode: high energy (used e.g. in some Tesla cells)." },
+  { term: "LCO", def: "Lithium cobalt oxide cathode: common in phones and laptops." },
+  { term: "Cell / module / pack", aka: ["module", "modules", "pack", "packs"], def: "Cell = one battery unit; module = a group of connected cells; pack = modules plus electronics and cooling, as installed in a vehicle." },
+  { term: "Calendar ageing", aka: ["calendar aging"], def: "Degradation while the battery rests, driven by time, temperature and SOC." },
+  { term: "Accelerated ageing", aka: ["accelerated aging", "accelerated test", "accelerated tests"], def: "Lab tests with harsher conditions (heat, high current) to age cells faster. Can create failure modes that real use doesn't." },
+  { term: "Cell-to-cell variation", aka: ["cell-to-cell", "cell variation"], def: "Nominally identical cells age differently because of small manufacturing and usage differences." },
+  { term: "Second life", aka: ["second-life", "reuse", "repurposing", "repurposed"], def: "Reusing a retired EV battery in a gentler job (e.g. stationary storage) before recycling it." },
+  { term: "Battery passport", aka: ["passport", "passports"], def: "A digital record of a battery's identity, materials and health. Required by the EU Battery Regulation 2023/1542 for EV and large industrial batteries from 2027." },
+  { term: "Regrouping", aka: ["regroup"], def: "Combining retired cells or modules with similar health into new packs, so one weak cell doesn't limit the group." },
+  { term: "Pyro / hydro / direct recycling", aka: ["pyrometallurgy", "hydrometallurgy", "direct recycling", "pyro", "hydro"], def: "Pyrometallurgy = smelting; hydrometallurgy = dissolving metals with chemicals; direct recycling = repairing the cathode material while keeping its structure." },
+
+  // ── degradation
+  { term: "SEI", aka: ["solid electrolyte interphase"], def: "Solid electrolyte interphase: a thin film on the negative electrode. It protects the cell but keeps growing, consuming lithium and electrolyte." },
+  { term: "Lithium plating", aka: ["plating"], def: "Lithium metal deposits on the electrode surface instead of entering it; favoured by fast charging, cold and high SOC. Can grow dendrites." },
+  { term: "LLI", aka: ["loss of lithium inventory", "lost lithium"], def: "Loss of lithium inventory: less cyclable lithium left to shuttle between electrodes." },
+  { term: "LAM", aka: ["LAM-NE", "LAM-PE", "loss of active material"], def: "Loss of active material: electrode material that can no longer store lithium (cracked, isolated or degraded); -NE / -PE says which electrode." },
+  { term: "Knee", aka: ["knee point", "knees", "knee-point"], def: "The point where capacity fade suddenly speeds up after a slower phase." },
+  { term: "Resistance elbow", aka: ["elbow"], def: "The point where resistance starts rising fast; usually appears with or after the capacity knee." },
+  { term: "Degradation mode", aka: ["degradation modes", "mode diagnosis"], def: "What electrical tests can infer (LLI, LAM, resistance), as opposed to the chemical mechanism behind it." },
+
+  // ── tests
+  { term: "CCCV", aka: ["CC-CV", "constant current constant voltage"], def: "Constant current, then constant voltage: the standard, slow (hours) way to measure true capacity." },
+  { term: "HPPC", aka: ["hybrid pulse power characterization"], def: "Hybrid pulse power characterisation: a standard sequence of current pulses at several SOC levels to measure resistance and power. Slow when run in full." },
+  { term: "Pulse test", aka: ["pulse", "pulses", "pulse injection", "short pulse"], def: "A few milliseconds to seconds of current; the voltage response reveals resistance and health. Fast and non-destructive." },
+  { term: "DCIR", aka: ["direct-current internal resistance"], def: "Direct-current internal resistance, computed from the voltage drop during a current pulse." },
+  { term: "EIS", aka: ["electrochemical impedance spectroscopy", "impedance spectroscopy"], def: "Electrochemical impedance spectroscopy: small AC signals at many frequencies; separates resistance contributions but needs a model to interpret." },
+  { term: "ICA / DVA", aka: ["ICA", "DVA", "dQ/dV", "dV/dQ", "incremental capacity"], def: "Incremental capacity (dQ/dV) and differential voltage (dV/dQ) analysis: peaks in slow charge curves shift as lithium or active material is lost, so LLI and LAM can be estimated." },
+  { term: "Coulometry", aka: ["HP coulometry", "coulombic efficiency"], def: "Precise counting of charge in vs out; small losses each cycle reveal side reactions." },
+
+  // ── ML & statistics
+  { term: "MAPE", aka: ["mean absolute percentage error"], def: "Mean absolute percentage error: average |error| ÷ true value. 5% MAPE on SoH 0.80 ≈ ±0.04." },
+  { term: "RMSE", aka: ["RMSPE", "root mean square error"], def: "Root mean square (percentage) error: like an average error, but punishes large errors more." },
+  { term: "MAE", aka: ["mean absolute error"], def: "Mean absolute error: the average size of the errors, in the target's units." },
+  { term: "R²", aka: ["R2", "R^2"], def: "Coefficient of determination: share of the variation explained by a fit (1 = perfect)." },
+  { term: "OOD", aka: ["out-of-distribution", "domain shift"], def: "Out-of-distribution: test data come from conditions the model never saw in training (e.g. a new SOC or chemistry), so accuracy can drop." },
+  { term: "Interpolation / extrapolation", aka: ["interpolation", "extrapolation", "interpolate", "extrapolate"], def: "Predicting inside the range of training conditions (interpolation) vs outside it (extrapolation, much harder)." },
+  { term: "VAE", aka: ["variational autoencoder", "autoencoder"], def: "Variational autoencoder: a generative model that compresses data into a small random 'latent' code and learns to decode new, realistic samples from it." },
+  { term: "Latent space", aka: ["latent"], def: "The compressed internal representation a model learns; nearby points decode to similar data." },
+  { term: "Cross-attention", aka: ["attention"], def: "A neural-network layer that lets one input (e.g. pulse features) focus on the parts of another input (e.g. SOC condition) that matter." },
+  { term: "Random forest", aka: ["RF"], def: "An ensemble of decision trees whose predictions are averaged; strong on tabular features, but its uncertainty estimates can be over-confident." },
+  { term: "Gaussian process", aka: ["GPR", "GP regression"], def: "A Bayesian regression method that gives a prediction plus a principled uncertainty band; slow on large data." },
+  { term: "Bayesian ridge", aka: ["BRR"], def: "Linear regression with a Bayesian prior on the weights; simple, gives uncertainty." },
+  { term: "Ensemble", aka: ["deep ensemble", "ensembles"], def: "Several models trained separately and combined; their disagreement gives an uncertainty estimate." },
+  { term: "Calibration", aka: ["calibrated", "over-confident", "overconfident"], def: "A model is well calibrated if its 90% intervals contain the truth about 90% of the time. Over-confident = intervals too narrow." },
+  { term: "Confidence interval", aka: ["confidence bounds", "uncertainty band"], def: "A range around a prediction that should contain the true value with a stated probability." },
+  { term: "Feature engineering", aka: ["features", "feature extraction", "feature selection"], def: "Turning raw signals (e.g. voltage curves) into a few informative numbers a model can use; selection keeps only the useful ones." },
+  { term: "Adversarial examples", aka: ["adversarial", "FGSM"], def: "Slightly perturbed inputs used in training to make a model robust to small changes (FGSM = fast gradient sign method)." },
+  { term: "Transfer learning", aka: ["domain adaptation"], def: "Reusing a model trained on one dataset/condition for another, with little new data." },
+  { term: "Synthetic data", aka: ["generated data", "data augmentation", "augmentation"], def: "Data produced by a model or simulation instead of measured; useful for training but not a real measurement." },
+  { term: "Physics-based model", aka: ["physics-based", "P2D", "SPM", "electrochemical model"], def: "A model built from battery physics and chemistry equations; explains behaviour but is hard to parameterise." },
+  { term: "Empirical model", aka: ["empirical"], def: "A curve fitted to observed ageing data (e.g. fade vs time and temperature) without modelling the internal physics." },
+  { term: "Hybrid model", aka: ["hybrid approach", "hybrid approaches", "hybrids", "physics-informed", "physics + ML"], def: "Combines physics-based and data-driven (ML) parts, aiming for accuracy plus generalisation." },
+  { term: "Federated learning", aka: ["federated"], def: "Training one model across several sites without sharing their raw data." },
+  { term: "KL divergence", aka: ["Kullback-Leibler"], def: "A measure of how different two probability distributions are (0 = identical)." },
+];
+
+</script>
 <script>
 // Tao et al. 2024, Nature Communications 15, 10154. Pages = PDF pages of the published article (1–14).
 window.MAP = {
@@ -298,6 +388,10 @@ window.MAP = {
         src: "Our reading", nodes: ["onecell", "temp", "cellsonly", "caponly", "chosen", "socknown"] },
     ],
   },
+  glossary: [
+    { term: "SOC conditioning", aka: ["conditioning"], def: "Charging or discharging a battery to a set SOC before testing it, so every measurement is comparable. Costs time and electricity." },
+    { term: "U1–U21", aka: ["U1"], def: "The 21 pulse-voltage features: voltages at the turning points of the response to five short pulses." },
+  ],
   legend: [
     ['<span class="ln-s"></span>', "leads to / feeds"],
     ['<span class="num" style="width:18px;height:18px;border-radius:50%;background:#1f2328;color:#fff;font-size:10px;display:grid;place-items:center">1</span>', "route step: lights up the cards for one figure"],
@@ -330,6 +424,16 @@ const X = M.X || COLS.map((_, i) => i * 330), Y0 = M.Y0 ?? 70, DY = M.DY ?? 128;
 const byId = Object.fromEntries(N.map(n => [n.id, n]));
 const gOf = Object.fromEntries(G.map(g => [g.id, g]));
 const isRoute = M.groups.kind === "route";
+// Glossary = shared base (window.GLOSSARY_BASE) + map-specific (M.glossary); map entries override base ones.
+const GLmap = new Map();
+[...(window.GLOSSARY_BASE || []), ...(M.glossary || [])].forEach(t => GLmap.set(t.term, t));
+const GLall = [...GLmap.values()];
+const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const GLre = GLall.map(t => ({ t, re: new RegExp("(^|[^A-Za-z0-9])(" + [t.term, ...(t.aka || [])].map(esc).join("|") + ")(?![A-Za-z0-9])", t.cs ? "" : "i") }));
+const textOf = n => [n.title, n.sub, n.note, ...(n.chips || [])].join(" ");
+const termsFor = n => GLre.filter(({ re }) => re.test(textOf(n))).map(({ t }) => t);
+const used = new Set(); N.forEach(n => termsFor(n).forEach(t => used.add(t.term)));
+const GL = GLall.filter(t => used.has(t.term)).sort((a, b) => a.term.localeCompare(b.term));
 const chipCls = c => "c" + (c.startsWith("✗") ? " warn" : c.startsWith("✓") ? " ok" : c.startsWith("⚠") ? " lim" : "");
 
 const H = [["l", Position.Left], ["r", Position.Right], ["t", Position.Top], ["b", Position.Bottom]];
@@ -379,7 +483,12 @@ function App() {
   const [hidden, setHidden] = useState({});
   const [q, setQ] = useState("");
   const [showAll, setShowAll] = useState(false);
+  const wide = window.innerWidth >= 1400;
+  const [leftOpen, setLeftOpen] = useState(wide);
+  const [rightOpen, setRightOpen] = useState(wide);
   const rf = useReactFlow();
+  const refit = () => setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 60);
+  useEffect(() => { if ((sel || grp) && !rightOpen) setRightOpen(true); }, [sel, grp]);
 
   const visible = useCallback(id => { const n = byId[id]; return !n || !hidden[n.col]; }, [hidden]);
   const hood = useMemo(() => {
@@ -421,7 +530,7 @@ function App() {
   });
 
   const pick = id => { setGrp(null); setSel(id); };
-  useEffect(() => { const t = setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 50); return () => clearTimeout(t); }, [hidden]);
+  useEffect(() => { const t = setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 60); return () => clearTimeout(t); }, [hidden, leftOpen, rightOpen]);
 
   const sn = sel && byId[sel];
   const ins = sn ? E.filter(e => e[1] === sel) : [], outs = sn ? E.filter(e => e[0] === sel) : [];
@@ -435,7 +544,8 @@ function App() {
     : html`<span className="tag" style=${{ background: it.color }}>${it.id}</span>`;
 
   return html`<div className="app"><div className="shell">
-    <aside className="side">
+    <aside className=${"side" + (leftOpen ? "" : " closed")}>
+      <button className="fold" title="Hide panel" onClick=${() => setLeftOpen(false)}>«</button>
       <div className="brand"><div className="logo">${M.logo}</div><div><b>${M.title}</b><span>${M.subtitle}</span></div></div>
       <input className="search" placeholder="Find a node" value=${q} onInput=${e => { setQ(e.target.value); setSel(null); setGrp(null); }} />
       <div className="focusq">❓ ${M.focus}</div>
@@ -450,10 +560,12 @@ function App() {
 
     <main className="canvas">
       <div className="topbar">
+        ${!leftOpen && html`<button className="btn ghost" title="Show side panel" onClick=${() => setLeftOpen(true)}>☰ ${M.title}</button>`}
         <span className="chip"><b>${N.length}</b> concepts · <b>${E.length}</b> links</span>
         ${(sel || grp || q) && html`<button className="btn ghost" onClick=${() => { setSel(null); setGrp(null); setQ(""); }}>✕ Clear</button>`}
         <button className="btn ghost" style=${{ marginLeft: "auto" }} onClick=${() => setShowAll(v => !v)}>${showAll ? "🔇 Quiet links" : "🕸️ Show all links"}</button>
-        <button className="btn" style=${{ marginLeft: 0 }} onClick=${() => rf.fitView({ padding: 0.08, duration: 300 })}>⤢ Fit view</button>
+        <button className="btn" style=${{ marginLeft: 0 }} onClick=${() => rf.fitView({ padding: 0.08, duration: 300 })}>⤢ Fit</button>
+        ${!rightOpen && html`<button className="btn ghost" style=${{ marginLeft: 0 }} title="Show details" onClick=${() => setRightOpen(true)}>ⓘ Details</button>`}
       </div>
       <${ReactFlow} nodes=${shownNodes} edges=${edges} nodeTypes=${nodeTypes} onNodesChange=${onNodesChange}
         onNodeClick=${(_, n) => n.type === "card" && pick(n.id === sel ? null : n.id)} onPaneClick=${() => setSel(null)}
@@ -463,13 +575,15 @@ function App() {
       </${ReactFlow}>
     </main>
 
-    <aside className="detail">
+    <aside className=${"detail" + (rightOpen ? "" : " closed")}>
+      <button className="fold r" title="Hide panel" onClick=${() => setRightOpen(false)}>»</button>
       ${sn ? html`<div>
           <div className="kicker"><span className="dot" style=${{ display: "inline-block", background: COLS[sn.col].color, marginRight: 6 }}></span>${COLS[sn.col].title.replace(/^\S+\s/, "")}</div>
           <h2>${sn.icon} ${sn.title}</h2>
           <div className="muted">${sn.sub}</div>
           <p>${sn.note}</p>
           ${sn.chips && html`<div className="chips">${sn.chips.map(c => html`<span key=${c} className=${chipCls(c)}>${c}</span>`)}</div>`}
+          ${termsFor(sn).length > 0 && html`<div className="box terms"><h4>📖 Terms</h4>${termsFor(sn).map(t => html`<div key=${t.term} className="term"><b>${t.term}</b> — ${t.def}</div>`)}</div>`}
           ${sn.rq && html`<div className="box rq"><h4>🎯 For our review</h4>${sn.rq}</div>`}
           ${ins.length > 0 && html`<div className="box"><h4>Fed by</h4>${ins.map(e => L(e, e[0]))}</div>`}
           ${outs.length > 0 && html`<div className="box"><h4>Leads to</h4>${outs.map(e => L(e, e[1]))}</div>`}
@@ -496,6 +610,8 @@ function App() {
           <div className="box"><h4>Legend</h4><div className="legend">
             ${M.legend.map(([sym, txt], i) => html`<${React.Fragment} key=${i}><span dangerouslySetInnerHTML=${{ __html: sym }}></span><span>${txt}</span></${React.Fragment}>`)}
           </div></div>
+          <details className="box gloss"><summary><h4 style=${{ display: "inline" }}>📖 Glossary (${GL.length})</h4></summary>
+            ${GL.map(t => html`<div key=${t.term} className="term"><b>${t.term}</b> — ${t.def}</div>`)}</details>
           <div className="box"><h4>Sources</h4>${M.sources.map((s, i) => html`<div key=${i} className="src">${s}</div>`)}</div>
         </div>`}
     </aside>
