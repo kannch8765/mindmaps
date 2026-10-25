@@ -134,6 +134,24 @@
   .gloss summary::-webkit-details-marker { display:none; }
   .gloss[open] summary { margin-bottom:6px; }
   @media (max-width: 900px) { .side.closed, .detail.closed { display:none; } }
+  /* views (segmented control) + drill-down */
+  .seg { pointer-events:auto; display:inline-flex; background:#fff; border:1px solid var(--line); border-radius:11px; padding:2px;
+         box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  .seg button { border:0; background:transparent; font:inherit; font-size:12px; padding:5px 10px; border-radius:8px; cursor:pointer;
+                color:var(--mute); white-space:nowrap; }
+  .seg button:hover { color:var(--ink); }
+  .seg button.on { background:#1f2328; color:#fff; }
+  .crumb { pointer-events:auto; background:#fff; border:1px solid var(--line); border-radius:999px; padding:5px 12px; font-size:12px;
+           box-shadow:0 1px 2px rgba(0,0,0,.04); white-space:nowrap; }
+  .crumb a { color:var(--mute); cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
+  .crumb a:hover { color:var(--ink); }
+  .crumb i { font-style:normal; color:var(--mute); margin:0 6px; }
+  .crumb b { font-weight:650; }
+  .card { position:relative; }
+  .dbadge { position:absolute; top:-8px; right:-8px; width:22px; height:22px; border-radius:50%; background:#fff;
+            border:1px solid var(--line); display:grid; place-items:center; font-size:11px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .drillbtn { display:block; margin:8px 0 2px; }
+  .drillq { background:#f0ebfa; border-color:#ddd2f3; }
 
 </style>
 </head>
@@ -403,10 +421,13 @@ window.MAP = {
 // Card-canvas concept graph engine (React Flow + htm). Reads a global MAP object.
 // MAP = { title, subtitle, logo, focus, cols:[{title,hint,color,tint}], X?, Y0?, DY?, nodes:[...], edges:[...],
 //         groups:{ label, kind:"loops"|"route", items:[{id,name,story,src,color?,kind?,nodes?}] },
-//         legend:[[symbolHtml,text]], sources:[...], howto:[...] }
+//         legend:[[symbolHtml,text]], sources:[...], howto:[...], glossary?:[{term,aka?,def,cs?}],
+//         views?:[{id,name,cols?:[{title,hint,color,tint,ids:[nodeId...]}]}],   // first view without cols = default layout
+//         drill?:{ key:{ title, crumb?, from:nodeId, note?, cols, nodes, edges, groups?, glossary?, X?, Y0?, DY? } } }
 // node = { id, col, row, icon, title, sub, chips?, badge?, note, src:[...], rq?, papers? }
 // edge = [source, target, label, kind ("n"|"neg"), groupId?]
-import React, { useMemo, useState, useCallback, useEffect } from "react";
+// Hash: #nodeId · #S1 · #view=story · #view=story&S2 · #drill=vae · #drill=vae&nodeId
+import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { ReactFlow, Background, Controls, Handle, Position, MarkerType, useNodesState, useReactFlow,
          ReactFlowProvider } from "@xyflow/react";
@@ -414,31 +435,64 @@ import htm from "htm";
 const html = htm.bind(React.createElement);
 
 const M = window.MAP;
-const COLS = M.cols, N = M.nodes, E = M.edges, G = M.groups.items;
-const X = M.X || COLS.map((_, i) => i * 330), Y0 = M.Y0 ?? 70, DY = M.DY ?? 128;
-const byId = Object.fromEntries(N.map(n => [n.id, n]));
-const gOf = Object.fromEntries(G.map(g => [g.id, g]));
-const isRoute = M.groups.kind === "route";
-// Glossary = shared base (window.GLOSSARY_BASE) + map-specific (M.glossary); map entries override base ones.
-const GLmap = new Map();
-[...(window.GLOSSARY_BASE || []), ...(M.glossary || [])].forEach(t => GLmap.set(t.term, t));
-const GLall = [...GLmap.values()];
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const GLre = GLall.map(t => ({ t, re: new RegExp("(^|[^A-Za-z0-9])(" + [t.term, ...(t.aka || [])].map(esc).join("|") + ")(?![A-Za-z0-9])", t.cs ? "" : "i") }));
 const textOf = n => [n.title, n.sub, n.note, ...(n.chips || [])].join(" ");
-const termsFor = n => GLre.filter(({ re }) => re.test(textOf(n))).map(({ t }) => t);
-const used = new Set(); N.forEach(n => termsFor(n).forEach(t => used.add(t.term)));
-const GL = GLall.filter(t => used.has(t.term)).sort((a, b) => a.term.localeCompare(b.term));
 const chipCls = c => "c" + (c.startsWith("✗") ? " warn" : c.startsWith("✓") ? " ok" : c.startsWith("⚠") ? " lim" : "");
+const shortTitle = t => t.replace(/^\S+\s/, "");
+
+// One "diagram" = the main map or a drill-down sub-diagram; everything derived from it lives here.
+function prep(D) {
+  const cols = D.cols, N = D.nodes, E = D.edges || [];
+  const groups = D.groups || { label: "", kind: "route", items: [] };
+  const G = groups.items || [];
+  // Glossary = shared base (window.GLOSSARY_BASE) + map-specific (M.glossary) + diagram-specific; later entries override.
+  const GLmap = new Map();
+  [...(window.GLOSSARY_BASE || []), ...(M.glossary || []), ...(D !== M ? D.glossary || [] : [])].forEach(t => GLmap.set(t.term, t));
+  const GLre = [...GLmap.values()].map(t => ({ t, re: new RegExp("(^|[^A-Za-z0-9])(" + [t.term, ...(t.aka || [])].map(esc).join("|") + ")(?![A-Za-z0-9])", t.cs ? "" : "i") }));
+  const termsFor = n => GLre.filter(({ re }) => re.test(textOf(n))).map(({ t }) => t);
+  const used = new Set(); N.forEach(n => termsFor(n).forEach(t => used.add(t.term)));
+  return {
+    D, cols, N, E, G, groups, isRoute: groups.kind === "route", termsFor,
+    X: D.X || cols.map((_, i) => i * 330), Y0: D.Y0 ?? M.Y0 ?? 70, DY: D.DY ?? M.DY ?? 128,
+    byId: Object.fromEntries(N.map(n => [n.id, n])), gOf: Object.fromEntries(G.map(g => [g.id, g])),
+    GL: [...GLmap.values()].filter(t => used.has(t.term)).sort((a, b) => a.term.localeCompare(b.term)),
+  };
+}
+const MAIN = prep(M);
+const DR = Object.fromEntries(Object.entries(M.drill || {}).map(([k, D]) => [k, prep(D)]));
+const drillFrom = Object.fromEntries(Object.entries(M.drill || {}).map(([k, D]) => [D.from, k]));
+const crumbOf = k => M.drill[k].crumb || M.drill[k].title.split(" — ")[0];
+const VIEWS = M.views && M.views.length ? M.views : null;
+const viewOf = id => (VIEWS && VIEWS.find(v => v.id === id)) || null;
+const VIEW0 = VIEWS ? VIEWS[0].id : null;
+
+// Layout: default = cols + node.col/row; a view with cols stacks its listed ids top-to-bottom per column.
+function layoutFor(dg, view) {
+  const colOf = {}, rowOf = {}, pos = {};
+  if (!view || !view.cols) {
+    dg.N.forEach(n => { colOf[n.id] = n.col; rowOf[n.id] = n.row; pos[n.id] = { x: dg.X[n.col], y: dg.Y0 + n.row * dg.DY }; });
+    return { cols: dg.cols, colOf, rowOf, pos, X: dg.X, custom: false };
+  }
+  view.cols.forEach((c, i) => {
+    const ids = c.ids.filter(id => dg.byId[id]), k = ids.length > 6 ? 0.95 : 1;
+    ids.forEach((id, j) => { colOf[id] = i; rowOf[id] = j * k; pos[id] = { x: i * 330, y: dg.Y0 + j * k * dg.DY }; });
+  });
+  return { cols: view.cols, colOf, rowOf, pos, X: view.cols.map((_, i) => i * 330), custom: true };
+}
+const buildNodes = (dg, lay) => [
+  ...lay.cols.map((c, i) => ({ id: "h-" + i, type: "header", position: { x: lay.X[i], y: 4 }, data: { c, i }, draggable: false, selectable: false })),
+  ...dg.N.map(n => ({ id: n.id, type: "card", position: lay.pos[n.id] || { x: dg.X[n.col], y: dg.Y0 + n.row * dg.DY }, data: { n } })),
+];
 
 const H = [["l", Position.Left], ["r", Position.Right], ["t", Position.Top], ["b", Position.Bottom]];
 function Card({ data }) {
-  const n = data.n, col = COLS[n.col];
+  const n = data.n;
   return html`<div className=${"card " + (data.cls || "")}>
     ${H.map(([k, p]) => html`<${Handle} key=${k + "s"} id=${k + "s"} type="source" position=${p} />`)}
     ${H.map(([k, p]) => html`<${Handle} key=${k + "t"} id=${k + "t"} type="target" position=${p} />`)}
+    ${data.drill && html`<div className="dbadge" title="Has a detailed diagram">🔍</div>`}
     <div className="hd">
-      <div className="ic" style=${{ background: col.tint }}>${n.icon}</div>
+      <div className="ic" style=${{ background: data.tint }}>${n.icon}</div>
       <div style=${{ minWidth: 0 }}><div className="ttl">${n.title}</div><div className="sub">${n.sub}</div></div>
       ${n.badge && html`<div className="badge">${n.badge}</div>`}
     </div>
@@ -451,17 +505,14 @@ function Header({ data }) {
 }
 const nodeTypes = { card: Card, header: Header };
 
-function handlesFor(s, t) {
-  const a = byId[s], b = byId[t];
-  if (b.col > a.col) return ["rs", "lt"];
-  if (b.col < a.col) return ["ls", "rt"];
-  return b.row > a.row ? ["bs", "tt"] : ["ts", "bt"];
+function handlesFor(s, t, lay) {
+  const ca = lay.colOf[s], cb = lay.colOf[t], ra = lay.rowOf[s], rb = lay.rowOf[t];
+  if (cb > ca) return ["rs", "lt"];
+  if (cb < ca) return ["ls", "rt"];
+  if (lay.custom && Math.abs(rb - ra) > 1.3) return ["rs", "rt"]; // skip-edges in a stacked view bow out to the right
+  return rb > ra ? ["bs", "tt"] : ["ts", "bt"];
 }
-const initialNodes = [
-  ...COLS.map((c, i) => ({ id: "h-" + i, type: "header", position: { x: X[i], y: 4 }, data: { c, i }, draggable: false, selectable: false })),
-  ...N.map(n => ({ id: n.id, type: "card", position: { x: X[n.col], y: Y0 + n.row * DY }, data: { n } })),
-];
-const groupNodes = g => {
+const groupNodes = (g, E) => {
   if (!g) return null;
   if (g.nodes) return new Set(g.nodes);
   const s = new Set(); E.forEach(([a, b, , , l]) => { if (l === g.id) { s.add(a); s.add(b); } });
@@ -470,11 +521,23 @@ const groupNodes = g => {
 };
 const edgeInGroup = (e, g, set) => g.nodes ? (set.has(e[0]) && set.has(e[1])) : e[4] === g.id;
 
+// Initial state from the hash.
+const HP = decodeURIComponent(location.hash.slice(1)).split("&").filter(Boolean);
+const hv = HP.find(p => p.startsWith("view="))?.slice(5), hd = HP.find(p => p.startsWith("drill="))?.slice(6);
+const H_VIEW = viewOf(hv) ? hv : VIEW0, H_DRILL = DR[hd] ? hd : null;
+const hRest = HP.filter(p => !p.includes("="));
+const H_DG = H_DRILL ? DR[H_DRILL] : MAIN;
+const H_SEL = hRest.find(p => H_DG.byId[p]) || null, H_GRP = hRest.find(p => H_DG.gOf[p]) || null;
+const ease = k => k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+
 function App() {
-  const [nodes, , onNodesChange] = useNodesState(initialNodes);
-  const h0 = decodeURIComponent(location.hash.slice(1));
-  const [sel, setSel] = useState(byId[h0] ? h0 : null);
-  const [grp, setGrp] = useState(gOf[h0] ? h0 : null);
+  const [view, setView] = useState(H_VIEW);
+  const [drill, setDrill] = useState(H_DRILL);
+  const dg = drill ? DR[drill] : MAIN;
+  const lay = useMemo(() => layoutFor(dg, drill ? null : viewOf(view)), [dg, drill, view]);
+  const [nodes, setNodes, onNodesChange] = useNodesState(useMemo(() => buildNodes(H_DG, layoutFor(H_DG, H_DRILL ? null : viewOf(H_VIEW))), []));
+  const [sel, setSel] = useState(H_SEL);
+  const [grp, setGrp] = useState(H_SEL ? null : H_GRP);
   const [hidden, setHidden] = useState({});
   const [q, setQ] = useState("");
   const [showAll, setShowAll] = useState(false);
@@ -482,33 +545,38 @@ function App() {
   const [leftOpen, setLeftOpen] = useState(wide);
   const [rightOpen, setRightOpen] = useState(wide);
   const rf = useReactFlow();
-  const refit = () => setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 60);
+  const anim = useRef(0);
+  const fit = () => rf.fitView({ padding: 0.08, duration: 300 });
+  const refit = () => setTimeout(fit, 60);
   useEffect(() => { if ((sel || grp) && !rightOpen) setRightOpen(true); }, [sel, grp]);
 
-  const visible = useCallback(id => { const n = byId[id]; return !n || !hidden[n.col]; }, [hidden]);
+  const { cols: LC } = lay, { N, E, G, byId, gOf, isRoute } = dg;
+  const hk = (drill ? "d:" + drill : "v:" + view) + ":";
+  const visible = useCallback(id => lay.colOf[id] !== undefined && !hidden[hk + lay.colOf[id]], [hidden, lay, hk]);
   const hood = useMemo(() => {
     if (!sel) return null;
     const s = new Set([sel]); E.forEach(([a, b]) => { if (a === sel) s.add(b); if (b === sel) s.add(a); }); return s;
-  }, [sel]);
-  const gSet = useMemo(() => groupNodes(gOf[grp]), [grp]);
+  }, [sel, E]);
+  const gSet = useMemo(() => groupNodes(gOf[grp], E), [grp, dg]);
   const hits = useMemo(() => {
     const t = q.trim().toLowerCase(); if (!t) return null;
     return new Set(N.filter(n => (n.title + " " + n.sub + " " + n.note).toLowerCase().includes(t)).map(n => n.id));
-  }, [q]);
+  }, [q, N]);
 
   const shownNodes = nodes.map(nd => {
-    if (nd.type === "header") return { ...nd, hidden: !!hidden[nd.data.i] };
+    if (nd.type === "header") return { ...nd, hidden: !!hidden[hk + nd.data.i] };
     let cls = "";
     if (hood) cls = nd.id === sel ? "focus" : hood.has(nd.id) ? "" : "dim";
     else if (gSet) cls = gSet.has(nd.id) ? "" : "dim";
     else if (hits) cls = hits.has(nd.id) ? "hit" : "dim";
-    return { ...nd, hidden: !visible(nd.id), data: { ...nd.data, cls } };
+    const n = nd.data.n;
+    return { ...nd, hidden: !visible(nd.id), data: { ...nd.data, cls, tint: dg.cols[n.col].tint, drill: !drill && !!drillFrom[n.id] } };
   });
 
   const g = gOf[grp];
   const edges = E.filter(([a, b]) => visible(a) && visible(b)).map((e, i) => {
     const [a, b, label, kind, l] = e;
-    const [sh, th] = handlesFor(a, b);
+    const [sh, th] = handlesFor(a, b, lay);
     const inHood = hood && (a === sel || b === sel);
     const inG = g && edgeInGroup(e, g, gSet);
     const active = inHood || inG;
@@ -525,7 +593,46 @@ function App() {
   });
 
   const pick = id => { setGrp(null); setSel(id); };
-  useEffect(() => { const t = setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 60); return () => clearTimeout(t); }, [hidden, leftOpen, rightOpen]);
+  useEffect(() => { const t = setTimeout(fit, 60); return () => clearTimeout(t); }, [hidden, leftOpen, rightOpen, drill]);
+  // Keep the hash in sync with view / drill (only after the first render, so initial #nodeId links survive).
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    const h = drill ? "drill=" + drill : view !== VIEW0 ? "view=" + view : "";
+    history.replaceState(null, "", location.pathname + location.search + (h ? "#" + h : ""));
+  }, [view, drill]);
+
+  // Switch view: animate cards from where they are to the new layout, then fit.
+  const switchView = id => {
+    if (id === view || drill) return;
+    const lay2 = layoutFor(MAIN, viewOf(id)), target = buildNodes(MAIN, lay2);
+    const cur = Object.fromEntries(nodes.map(n => [n.id, n.position]));
+    const vis0 = id0 => lay.colOf[id0] !== undefined;
+    setView(id);
+    const t0 = performance.now(), dur = 480, token = ++anim.current;
+    let done = false;
+    const finish = () => { if (done || token !== anim.current) return; done = true; setNodes(target); refit(); };
+    const step = now => {
+      if (done || token !== anim.current) return;
+      const k = Math.min(1, (now - t0) / dur), e = ease(k);
+      if (k >= 1) return finish();
+      setNodes(target.map(n => {
+        const a = cur[n.id];
+        if (n.type === "header" || !a || !vis0(n.id)) return n;
+        return { ...n, position: { x: a.x + (n.position.x - a.x) * e, y: a.y + (n.position.y - a.y) * e } };
+      }));
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    setTimeout(finish, dur + 120); // rAF can be paused (background tab / headless); always land on the final layout
+  };
+  const openDrill = k => {
+    anim.current++;
+    const d2 = k ? DR[k] : MAIN;
+    setSel(k ? null : M.drill[drill]?.from || null); setGrp(null); setQ("");
+    setDrill(k);
+    setNodes(buildNodes(d2, layoutFor(d2, k ? null : viewOf(view))));
+  };
 
   const sn = sel && byId[sel];
   const ins = sn ? E.filter(e => e[1] === sel) : [], outs = sn ? E.filter(e => e[0] === sel) : [];
@@ -537,17 +644,21 @@ function App() {
   const tagOf = (it, idx) => isRoute
     ? html`<span className="num">${idx + 1}</span>`
     : html`<span className="tag" style=${{ background: it.color }}>${it.id}</span>`;
+  const DD = drill && M.drill[drill];
+  const snDrill = sn && !drill && drillFrom[sn.id];
 
   return html`<div className="app"><div className="shell">
     <aside className=${"side" + (leftOpen ? "" : " closed")}>
       <button className="fold" title="Hide panel" onClick=${() => setLeftOpen(false)}>«</button>
       <div className="brand"><div className="logo">${M.logo}</div><div><b>${M.title}</b><span>${M.subtitle}</span></div></div>
       <input className="search" placeholder="Find a node" value=${q} onInput=${e => { setQ(e.target.value); setSel(null); setGrp(null); }} />
-      <div className="focusq">❓ ${M.focus}</div>
-      <div className="sec-h"><span>Layers</span><span>${N.length}</span></div>
-      ${COLS.map((c, i) => html`<div key=${i} className=${"row " + (hidden[i] ? "off" : "")} onClick=${() => setHidden(h => ({ ...h, [i]: !h[i] }))}>
-          <span className="dot" style=${{ background: c.color }}></span>${c.title.replace(/^\S+\s/, "")}<span className="cnt">${N.filter(n => n.col === i).length}</span></div>`)}
-      <div className="sec-h"><span>${M.groups.label}</span><span>${G.length}</span></div>
+      ${DD ? html`<div className="focusq drillq">🔍 ${DD.title}
+          <button className="pbtn" style=${{ marginTop: 8, display: "block" }} onClick=${() => openDrill(null)}>← Back to the main map</button></div>`
+        : html`<div className="focusq">❓ ${M.focus}</div>`}
+      <div className="sec-h"><span>Layers</span><span>${N.filter(n => lay.colOf[n.id] !== undefined).length}</span></div>
+      ${LC.map((c, i) => html`<div key=${hk + i} className=${"row " + (hidden[hk + i] ? "off" : "")} onClick=${() => setHidden(h => ({ ...h, [hk + i]: !h[hk + i] }))}>
+          <span className="dot" style=${{ background: c.color }}></span>${shortTitle(c.title)}<span className="cnt">${N.filter(n => lay.colOf[n.id] === i).length}</span></div>`)}
+      ${G.length > 0 && html`<div className="sec-h"><span>${dg.groups.label}</span><span>${G.length}</span></div>`}
       ${G.map((it, idx) => html`<div key=${it.id} className=${"row loop " + (grp === it.id ? "on" : "")}
           onClick=${() => { setSel(null); setQ(""); setGrp(grp === it.id ? null : it.id); }}>
           <div className="lt">${tagOf(it, idx)}${it.name}</div><div className="ls">${it.story}</div></div>`)}
@@ -556,15 +667,19 @@ function App() {
     <main className="canvas">
       <div className="topbar">
         ${!leftOpen && html`<button className="btn ghost" title="Show side panel" onClick=${() => setLeftOpen(true)}>☰ ${M.title}</button>`}
-        <span className="chip"><b>${N.length}</b> concepts · <b>${E.length}</b> links</span>
+        ${DD && html`<span className="crumb"><a onClick=${() => openDrill(null)}>${M.title}</a><i>›</i><b>${crumbOf(drill)}</b></span>`}
+        ${VIEWS && !drill && html`<span className="seg">${VIEWS.map(v => html`<button key=${v.id} className=${v.id === view ? "on" : ""} onClick=${() => switchView(v.id)}>${v.name}</button>`)}</span>`}
+        <span className="chip"><b>${N.filter(n => lay.colOf[n.id] !== undefined).length}</b> concepts · <b>${E.length}</b> links</span>
         ${(sel || grp || q) && html`<button className="btn ghost" onClick=${() => { setSel(null); setGrp(null); setQ(""); }}>✕ Clear</button>`}
         <button className="btn ghost" style=${{ marginLeft: "auto" }} onClick=${() => setShowAll(v => !v)}>${showAll ? "🔇 Quiet links" : "🕸️ Show all links"}</button>
-        <button className="btn" style=${{ marginLeft: 0 }} onClick=${() => rf.fitView({ padding: 0.08, duration: 300 })}>⤢ Fit</button>
+        <button className="btn" style=${{ marginLeft: 0 }} onClick=${fit}>⤢ Fit</button>
         ${!rightOpen && html`<button className="btn ghost" style=${{ marginLeft: 0 }} title="Show details" onClick=${() => setRightOpen(true)}>ⓘ Details</button>`}
       </div>
       <${ReactFlow} nodes=${shownNodes} edges=${edges} nodeTypes=${nodeTypes} onNodesChange=${onNodesChange}
         onNodeClick=${(_, n) => n.type === "card" && pick(n.id === sel ? null : n.id)} onPaneClick=${() => setSel(null)}
-        fitView fitViewOptions=${{ padding: 0.08 }} minZoom=${0.2} maxZoom=${2} nodesConnectable=${false} proOptions=${{ hideAttribution: true }}>
+        onNodeDoubleClick=${(_, n) => !drill && drillFrom[n.id] && openDrill(drillFrom[n.id])}
+        fitView fitViewOptions=${{ padding: 0.08 }} minZoom=${0.2} maxZoom=${2} nodesConnectable=${false} zoomOnDoubleClick=${false}
+        proOptions=${{ hideAttribution: true }}>
         <${Background} variant="dots" gap=${18} size=${1.2} color="#d9d6cf" />
         <${Controls} showInteractive=${false} position="bottom-right" />
       </${ReactFlow}>
@@ -573,12 +688,13 @@ function App() {
     <aside className=${"detail" + (rightOpen ? "" : " closed")}>
       <button className="fold r" title="Hide panel" onClick=${() => setRightOpen(false)}>»</button>
       ${sn ? html`<div>
-          <div className="kicker"><span className="dot" style=${{ display: "inline-block", background: COLS[sn.col].color, marginRight: 6 }}></span>${COLS[sn.col].title.replace(/^\S+\s/, "")}</div>
+          <div className="kicker"><span className="dot" style=${{ display: "inline-block", background: dg.cols[sn.col].color, marginRight: 6 }}></span>${shortTitle(dg.cols[sn.col].title)}</div>
           <h2>${sn.icon} ${sn.title}</h2>
           <div className="muted">${sn.sub}</div>
+          ${snDrill && html`<button className="pbtn on drillbtn" onClick=${() => openDrill(snDrill)}>🔍 Open diagram: ${crumbOf(snDrill)}</button>`}
           <p>${sn.note}</p>
           ${sn.chips && html`<div className="chips">${sn.chips.map(c => html`<span key=${c} className=${chipCls(c)}>${c}</span>`)}</div>`}
-          ${termsFor(sn).length > 0 && html`<div className="box terms"><h4>📖 Terms</h4>${termsFor(sn).map(t => html`<div key=${t.term} className="term"><b>${t.term}</b> — ${t.def}</div>`)}</div>`}
+          ${dg.termsFor(sn).length > 0 && html`<div className="box terms"><h4>📖 Terms</h4>${dg.termsFor(sn).map(t => html`<div key=${t.term} className="term"><b>${t.term}</b> — ${t.def}</div>`)}</div>`}
           ${sn.rq && html`<div className="box rq"><h4>🎯 For our review</h4>${sn.rq}</div>`}
           ${ins.length > 0 && html`<div className="box"><h4>Fed by</h4>${ins.map(e => L(e, e[0]))}</div>`}
           ${outs.length > 0 && html`<div className="box"><h4>Leads to</h4>${outs.map(e => L(e, e[1]))}</div>`}
@@ -595,18 +711,31 @@ function App() {
             ${G.indexOf(g) < G.length - 1 && html`<button className="pbtn on" onClick=${() => setGrp(G[G.indexOf(g) + 1].id)}>Next step →</button>`}
           </div>`}
         </div>`
+      : DD ? html`<div>
+          <div className="kicker">Detailed diagram · zoomed in from “${MAIN.byId[DD.from]?.title || DD.from}”</div>
+          <h2>🔍 ${DD.title}</h2>
+          ${DD.note && html`<p className="muted">${DD.note}</p>`}
+          <div className="box"><h4>Try</h4>
+            <div>• <b>Click a card</b> to trace what feeds it and what it feeds</div>
+            <div>• <b>${M.title} ›</b> in the top bar takes you back</div></div>
+          ${dg.GL.length > 0 && html`<details className="box gloss" open><summary><h4 style=${{ display: "inline" }}>📖 Glossary (${dg.GL.length})</h4></summary>
+            ${dg.GL.map(t => html`<div key=${t.term} className="term"><b>${t.term}</b> — ${t.def}</div>`)}</details>`}
+          <button className="pbtn" onClick=${() => openDrill(null)}>← Back to the main map</button>
+        </div>`
       : html`<div>
           <h2 style=${{ marginTop: 0 }}>How to read</h2>
           ${M.howto.map((t, i) => html`<p key=${i} className="muted">${t}</p>`)}
           <div className="box"><h4>Try</h4>
             <div>• <b>Click a card</b> to trace what feeds it and what it feeds</div>
-            <div>• <b>${isRoute ? "Click step 1" : "Click a loop"}</b> on the left${isRoute ? " and follow Next →" : " to light it up"}</div>
+            ${G.length > 0 && html`<div>• <b>${isRoute ? "Click step 1" : "Click a loop"}</b> on the left${isRoute ? " and follow Next →" : " to light it up"}</div>`}
+            ${VIEWS && html`<div>• <b>Switch view</b> in the top bar to regroup the same cards</div>`}
+            ${M.drill && html`<div>• Cards with <b>🔍</b> open a detailed diagram</div>`}
             <div>• Hide layers to simplify; drag cards freely</div></div>
           <div className="box"><h4>Legend</h4><div className="legend">
             ${M.legend.map(([sym, txt], i) => html`<${React.Fragment} key=${i}><span dangerouslySetInnerHTML=${{ __html: sym }}></span><span>${txt}</span></${React.Fragment}>`)}
           </div></div>
-          <details className="box gloss"><summary><h4 style=${{ display: "inline" }}>📖 Glossary (${GL.length})</h4></summary>
-            ${GL.map(t => html`<div key=${t.term} className="term"><b>${t.term}</b> — ${t.def}</div>`)}</details>
+          <details className="box gloss"><summary><h4 style=${{ display: "inline" }}>📖 Glossary (${MAIN.GL.length})</h4></summary>
+            ${MAIN.GL.map(t => html`<div key=${t.term} className="term"><b>${t.term}</b> — ${t.def}</div>`)}</details>
           <div className="box"><h4>Sources</h4>${M.sources.map((s, i) => html`<div key=${i} className="src">${s}</div>`)}</div>
         </div>`}
     </aside>

@@ -134,6 +134,24 @@
   .gloss summary::-webkit-details-marker { display:none; }
   .gloss[open] summary { margin-bottom:6px; }
   @media (max-width: 900px) { .side.closed, .detail.closed { display:none; } }
+  /* views (segmented control) + drill-down */
+  .seg { pointer-events:auto; display:inline-flex; background:#fff; border:1px solid var(--line); border-radius:11px; padding:2px;
+         box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  .seg button { border:0; background:transparent; font:inherit; font-size:12px; padding:5px 10px; border-radius:8px; cursor:pointer;
+                color:var(--mute); white-space:nowrap; }
+  .seg button:hover { color:var(--ink); }
+  .seg button.on { background:#1f2328; color:#fff; }
+  .crumb { pointer-events:auto; background:#fff; border:1px solid var(--line); border-radius:999px; padding:5px 12px; font-size:12px;
+           box-shadow:0 1px 2px rgba(0,0,0,.04); white-space:nowrap; }
+  .crumb a { color:var(--mute); cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
+  .crumb a:hover { color:var(--ink); }
+  .crumb i { font-style:normal; color:var(--mute); margin:0 6px; }
+  .crumb b { font-weight:650; }
+  .card { position:relative; }
+  .dbadge { position:absolute; top:-8px; right:-8px; width:22px; height:22px; border-radius:50%; background:#fff;
+            border:1px solid var(--line); display:grid; place-items:center; font-size:11px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .drillbtn { display:block; margin:8px 0 2px; }
+  .drillq { background:#f0ebfa; border-color:#ddd2f3; }
 
 </style>
 </head>
@@ -237,7 +255,7 @@ window.MAP = {
   ],
   nodes: [
     // ① problem
-    { id: "random", col: 0, row: 0, icon: "🎲", title: "Random arrival SOC", sub: "Problem",
+    { id: "random", col: 0, row: 0, icon: "🎲", title: "Batteries arrive at random charge", sub: "Problem",
       chips: ["usually ≤ 50% SOC"],
       note: "Retired batteries arrive at random states of charge, usually low because they are discharged for safe warehouse storage. That's why the study covers 5–50% SOC.",
       src: ["p. 5 (SOC range assumption)", "Fig. 2e, p. 4"] },
@@ -249,17 +267,17 @@ window.MAP = {
       chips: ["passport gap"],
       note: "Cloud platforms and battery passports record data only during service. Once retired, the battery is no longer connected to the in-vehicle monitoring unit, so field SoH data are hard to get.",
       src: ["p. 2"] },
-    { id: "slow", col: 0, row: 3.6, icon: "⏳", title: "Ground truth is slow", sub: "Problem",
+    { id: "slow", col: 0, row: 3.6, icon: "⏳", title: "True SoH takes hours", sub: "Problem",
       chips: ["HPPC > 12 h"],
       note: "A capacity calibration (CCCV) test is lengthy, and a full HPPC pulse sequence takes over 12 hours. Invasive material analysis is not an option at scale.",
       src: ["p. 2"] },
-    { id: "cond", col: 0, row: 4.8, icon: "🔋", title: "Old fix: SOC conditioning", sub: "Problem · baseline",
+    { id: "cond", col: 0, row: 4.8, icon: "🔋", title: "Old fix: recharge first", sub: "Problem · baseline",
       chips: ["time", "electricity", "CO₂"],
       note: "Charge or discharge every battery to a set SOC before the pulse test (their earlier work assumed 5% SOC). Straightforward, but it costs test time and electricity.",
       src: ["p. 2", "Fig. 1a, p. 3"] },
 
     // ② data
-    { id: "set", col: 1, row: 0.3, icon: "🗃️", title: "2,700 samples · 270 batteries", sub: "Data",
+    { id: "set", col: 1, row: 0.3, icon: "🗃️", title: "Large retired-battery dataset", sub: "Data · 2,700 samples from 270 batteries",
       chips: ["10 SOC levels", "5–50%, step 5%"],
       note: "Each of 270 physically retired batteries is pulse-tested at 10 SOC levels. The authors call it the largest rapid-pulse dataset for retired-battery SoH so far.",
       src: ["p. 3 (Dataset acquisition)", "Fig. 2a, p. 4"] },
@@ -267,11 +285,11 @@ window.MAP = {
       chips: ["119 NMC", "56 LFP", "95 LMO"],
       note: "3 cathode types, 3 formats (cylindrical, pouch, prismatic), 4 capacity designs (2.1–35 Ah), 4 usage histories (1 lab accelerated, 1 pure EV, 2 hybrid EV).",
       src: ["p. 3", "Fig. 2a, p. 4"] },
-    { id: "pulse", col: 1, row: 2.9, icon: "⚡", title: "Pulse test → 21 features", sub: "Data · feature engineering",
+    { id: "pulse", col: 1, row: 2.9, icon: "⚡", title: "Fast pulse test", sub: "Data · feature engineering",
       chips: ["U1–U21", "100 Hz", "25 °C"],
       note: "Five short current pulses; the turning points of the voltage response (zero second derivative) give 21 features. 25 s rest between pulses. Pulse widths from 30 ms to 5 s were tested for robustness.",
       src: ["pp. 3–4", "Fig. 2b, p. 4"] },
-    { id: "label", col: 1, row: 4.2, icon: "🏷️", title: "SoH label = CCCV capacity", sub: "Data · ground truth",
+    { id: "label", col: 1, row: 4.2, icon: "🏷️", title: "Ground-truth SoH label", sub: "Data · ground truth",
       chips: ["SoH 0.6–1"],
       note: "The slow CCCV capacity test gives the SoH benchmark; pulse data are the model inputs. SoH spans roughly 0.6 to 1, including some very early retirements.",
       src: ["pp. 2–4", "Fig. 2c, p. 4"] },
@@ -281,22 +299,22 @@ window.MAP = {
       chips: ["5 s pulses", "±0.5 / 1 / 1.5C", "rest between"],
       note: "After charging to the target SOC and resting 10 min: +0.5C charge pulse → rest → −0.5C discharge → rest → +1C → rest → −1C → rest → +1.5C → rest. Charge and discharge pulses alternate so the stored charge stays the same.",
       src: ["Supp. Note 1, pp. 43–45", "PulseBat README §2.2.3, §4.2"] },
-    { id: "u1", col: 2, row: 1.15, icon: "🔋", title: "U1 = resting voltage", sub: "Features · 1 value",
+    { id: "u1", col: 2, row: 1.15, icon: "🔋", title: "Resting voltage (U1)", sub: "Features · 1 value",
       chips: ["OCV", "mostly SOC"],
       note: "The open-circuit voltage after a 10-minute rest. It mainly reflects how full the battery is, which is why it shifts so strongly with SOC (Fig. 2d plots U1).",
       src: ["PulseBat README §4.2", "Fig. 2d, p. 4"] },
-    { id: "u2", col: 2, row: 2.3, icon: "📐", title: "U2–U17 = step corners", sub: "Features · 16 values",
+    { id: "u2", col: 2, row: 2.3, icon: "📐", title: "Pulse corner voltages (U2–U17)", sub: "Features · 16 values",
       chips: ["0.5C: U2–U9", "1C: U10–U17"],
       note: "Voltage at the start and end of each step (charge pulse, rest, discharge pulse, rest) at 0.5C and at 1C: 4 steps × 2 corners × 2 currents = 16 numbers.",
       src: ["PulseBat README §4.2", "Fig. 2b, p. 4"] },
-    { id: "u18", col: 2, row: 3.45, icon: "📐", title: "U18–U21 = 1.5C pulse", sub: "Features · 4 values",
+    { id: "u18", col: 2, row: 3.45, icon: "📐", title: "Highest-current pulse (U18–U21)", sub: "Features · 4 values",
       note: "Start and end of the 1.5C charge pulse and of the rest after it. 1 + 16 + 4 = 21 features = the paper's \"first five pulses\".",
       src: ["PulseBat README §4.2", "p. 3 (first five pulses)"] },
     { id: "meaning", col: 2, row: 4.6, icon: "🔬", title: "What the corners measure", sub: "Features · background",
       chips: ["jump ≈ resistance", "creep ≈ polarisation"],
       note: "General battery background (not stated in the paper): the instant voltage jump at a pulse start reflects internal resistance, the slow creep reflects polarisation, the rest shows recovery. Resistance and OCV both depend on SOC, hence the drift.",
       src: ["General background", "p. 5 (polarisation is SOC-sensitive)"] },
-    { id: "socdef", col: 2, row: 5.75, icon: "📏", title: "SOC = % of nominal capacity", sub: "Features · definition caveat",
+    { id: "socdef", col: 2, row: 5.75, icon: "📏", title: "SOC measured against nameplate", sub: "Features · definition caveat",
       chips: ["⚠ definition"],
       note: "In this dataset SOC is charged capacity ÷ nameplate capacity, not ÷ the battery's actual capacity. So an SoH-0.6 battery at \"50% SOC\" is about 83% full. Also: the paper says \"zero second-derivative points\" while the code uses step start/end; rest is 25 s in Fig. 2 (lab cells) vs 75 s in the README (EV cells).",
       src: ["PulseBat README §2.2.2", "Supp. Note 1 (SOC range up to SoH)", "Fig. 2b caption vs README §4.2"] },
@@ -306,14 +324,14 @@ window.MAP = {
       chips: ["encoder", "decoder"],
       note: "The encoder compresses measured pulse features (plus conditions) into a latent space; the decoder rebuilds them. To generate, the decoder gets Gaussian noise plus the target conditions: no new physical test.",
       src: ["p. 5 (data generation)", "Fig. 1b, p. 3", "Methods pp. 10–11"] },
-    { id: "condin", col: 3, row: 1.8, icon: "🎛️", title: "Conditions: SOC + SoH", sub: "Generator · cross-attention",
+    { id: "condin", col: 3, row: 1.8, icon: "🎛️", title: "Steering by condition", sub: "Generator · cross-attention",
       note: "Cross-attention links the retirement conditions to the pulse features, so the model learns how the response changes with SOC. SoH is also given as a condition.",
       src: ["Methods p. 10 (cross-attention)", "p. 11 (SoH and SOC dimensions)"] },
-    { id: "recon", col: 3, row: 3.0, icon: "🔁", title: "Check 1: reconstruction", sub: "Generator · result",
+    { id: "recon", col: 3, row: 3.0, icon: "🔁", title: "Can it rebuild real data?", sub: "Generator · result",
       chips: ["MAPE < 1%"],
       note: "Rebuilding measured data works for all 21 features with MAPE below 1%. Error is a bit higher at low SOC, so the authors recommend mid-SOC pulses when possible.",
       src: ["Fig. 3a–b, p. 6", "p. 5"] },
-    { id: "cases", col: 3, row: 4.2, icon: "🧪", title: "Check 2: unseen SOC (8 cases)", sub: "Generator · result",
+    { id: "cases", col: 3, row: 4.2, icon: "🧪", title: "Can it fill in unseen SOC?", sub: "Generator · result",
       chips: ["Case 0–3 interpolate", "Case 4–7 extrapolate"],
       note: "Interpolation: train at e.g. 5/25/50% SOC, generate 10–45% (Case 3). Extrapolation: generate SOC levels outside the training range. Interpolation generation error stays below 2%.",
       src: ["Fig. 3c–d, p. 6", "pp. 5–6"] },
@@ -326,43 +344,43 @@ window.MAP = {
       chips: ["20 trees", "scikit-learn"],
       note: "A simple random forest is trained on generated features and estimates SoH from a fresh pulse at whatever SOC the battery arrived at. Same hyperparameters across cases.",
       src: ["Methods p. 12", "Fig. 1c, p. 3"] },
-    { id: "inter", col: 4, row: 1.8, icon: "🎯", title: "Interpolation: MAPE 4.4%", sub: "Result", chips: ["σ 2.5"],
+    { id: "inter", col: 4, row: 1.8, icon: "🎯", title: "Accuracy inside the training range", sub: "Result · interpolation", chips: ["MAPE 4.4%", "σ 2.5"],
       note: "Average SoH error when the target SOC lies inside the training range.",
       src: ["p. 7", "Fig. 4a–b, p. 8"] },
-    { id: "extra", col: 4, row: 3.0, icon: "🎯", title: "Extrapolation: MAPE 6.0%", sub: "Result", chips: ["σ 2.7"],
+    { id: "extra", col: 4, row: 3.0, icon: "🎯", title: "Accuracy outside the training range", sub: "Result · extrapolation", chips: ["MAPE 6.0%", "σ 2.7"],
       note: "Average SoH error when the target SOC lies outside the training range: harder, but still usable thanks to latent scaling.",
       src: ["p. 7", "Fig. 4a, p. 8"] },
-    { id: "compare", col: 4, row: 4.2, icon: "⚖️", title: "With vs without generation", sub: "Result · the headline",
+    { id: "compare", col: 4, row: 4.2, icon: "⚖️", title: "Why generation is needed", sub: "Result · the headline",
       chips: ["17.3% → 5.4%", "23.8% → 6.0%"],
       note: "Training only on the measured SOC levels biases estimates toward the training data (Case 3: MAPE 17.3%). Generated data cut it to 5.4%. With only 5–10% SOC data (Case 7): 23.8% → 6.0%.",
       src: ["p. 7", "Fig. 4c–d, p. 8"] },
-    { id: "bias", col: 4, row: 5.4, icon: "↕️", title: "Over/under-estimation at SOC ends", sub: "Result · caveat",
+    { id: "bias", col: 4, row: 5.4, icon: "↕️", title: "Bias at the SOC extremes", sub: "Result · caveat",
       note: "SoH is overestimated at higher SOC and underestimated at lower SOC, which the authors link to the Gaussian latent prior.",
       src: ["p. 7"] },
 
     // ⑤ impact
-    { id: "co2", col: 5, row: 0.6, icon: "🌱", title: "CO₂ per ton (NMC)", sub: "Impact",
+    { id: "co2", col: 5, row: 0.6, icon: "🌱", title: "Lower recycling emissions", sub: "Impact · kg CO₂-eq per ton of NMC",
       chips: ["pyro 1104 → 753", "hydro 729 → 379", "direct 579 → 228"],
       note: "kg CO₂-eq per ton of retired NMC batteries, CCCV vs generative pretreatment, assuming 80% SOH and 50% SOC.",
       src: ["p. 7", "Fig. 5b, p. 9"] },
-    { id: "breakeven", col: 5, row: 1.9, icon: "📦", title: "Cheapest beyond ~5.3 t", sub: "Impact",
+    { id: "breakeven", col: 5, row: 1.9, icon: "📦", title: "Pays off at scale", sub: "Impact · cost vs retirement volume", chips: ["cheapest ≥ 5.33 t"],
       note: "Generative learning becomes the cheapest pretreatment above a 5.33-ton retirement scale (and beats pulse tests at 25% SOC from 1.07 t).",
       src: ["p. 7", "Fig. 5c, p. 9"] },
-    { id: "y2030", col: 5, row: 3.2, icon: "🌍", title: "2030: $4.9B · 35.8B kg CO₂", sub: "Impact · global scenario",
+    { id: "y2030", col: 5, row: 3.2, icon: "🌍", title: "Global savings projection", sub: "Impact · 2030 scenario", chips: ["$4.9B electricity", "35.8B kg CO₂"],
       note: "Projected savings if the method were deployed uniformly in a 2030 worldwide retirement scenario.",
       src: ["Abstract p. 1", "Fig. 1d, p. 3", "Fig. 5e–f, p. 9"] },
-    { id: "assume", col: 5, row: 4.5, icon: "📝", title: "Assumptions behind the numbers", sub: "Impact · read carefully",
+    { id: "assume", col: 5, row: 4.5, icon: "📝", title: "Assumptions behind the savings", sub: "Impact · read carefully",
       chips: ["80% SOH", "50% SOC", "uniform use"],
       note: "The economic numbers assume 80% SOH, 50% SOC and uniform deployment; LMO is left out of the economic analysis.",
       src: ["p. 7 (LMO not covered)", "Fig. 5 caption, p. 9"] },
 
     // ⑥ limits (our reading)
-    { id: "onecell", col: 6, row: 0, icon: "🔍", title: "Main figures: one cell type", sub: "Limit",
+    { id: "onecell", col: 6, row: 0, icon: "🔍", title: "Results shown on one cell type", sub: "Limit",
       chips: ["⚠ NMC 2.1 Ah"],
       note: "Figs. 3–4 show NMC 2.1 Ah lab-aged cells only; the other batteries are in the supplementary material.",
       src: ["Fig. 3 & 4 captions, pp. 6, 8"] },
-    { id: "temp", col: 6, row: 1.1, icon: "🌡️", title: "Tested at 25 °C only", sub: "Limit",
-      chips: ["⚠ no hot/cold"],
+    { id: "temp", col: 6, row: 1.1, icon: "🌡️", title: "Lab temperature only", sub: "Limit", 
+      chips: ["⚠ 25 °C only"],
       note: "Pulse tests ran at a controlled 25 °C. How the method behaves in hot or humid field conditions is not tested.",
       src: ["Fig. 2b caption, p. 4"] },
     { id: "cellsonly", col: 6, row: 2.2, icon: "🧱", title: "Cells, not modules or packs", sub: "Limit · our reading",
@@ -414,9 +432,144 @@ window.MAP = {
         src: "Our reading", nodes: ["onecell", "temp", "cellsonly", "caponly", "chosen", "socknown"] },
     ],
   },
+  views: [
+    { id: "type", name: "🗂️ By type" },
+    { id: "story", name: "💡 Story", cols: [
+      { title: "① Why it's hard", hint: "the problem", color: "#d9485f", tint: "#fdecef",
+        ids: ["random", "shift", "history", "slow", "cond"] },
+      { title: "② The idea", hint: "generate the missing SOC data", color: "#7a5cc2", tint: "#f0ebfa",
+        ids: ["vae", "condin", "scale"] },
+      { title: "③ What goes in", hint: "data and the 21 features", color: "#e8833a", tint: "#fdf0e5",
+        ids: ["set", "mix", "pulse", "protocol", "u1", "u2", "u18", "meaning", "socdef", "label"] },
+      { title: "④ Does it work?", hint: "generation and SoH accuracy", color: "#3e7cb1", tint: "#e8f0f8",
+        ids: ["recon", "cases", "rf", "inter", "extra", "compare", "bias"] },
+      { title: "⑤ So what", hint: "cost and CO₂", color: "#2f8f5b", tint: "#e7f4ec",
+        ids: ["co2", "breakeven", "y2030", "assume"] },
+      { title: "⑥ Watch out", hint: "our reading of the limits", color: "#b8860b", tint: "#fff4e0",
+        ids: ["onecell", "temp", "cellsonly", "caponly", "chosen", "socknown"] },
+    ] },
+    { id: "paper", name: "📄 Paper order", cols: [
+      { title: "① Introduction (pp. 1–2)", hint: "why SoH at random SOC is hard", color: "#d9485f", tint: "#fdecef",
+        ids: ["shift", "history", "slow", "cond"] },
+      { title: "② Dataset (pp. 3–4)", hint: "Fig. 2", color: "#e8833a", tint: "#fdf0e5",
+        ids: ["set", "mix", "pulse", "label"] },
+      { title: "③ Data generation (pp. 5–6)", hint: "Fig. 3", color: "#7a5cc2", tint: "#f0ebfa",
+        ids: ["random", "vae", "recon", "cases", "scale"] },
+      { title: "④ SoH estimation (pp. 7–8)", hint: "Fig. 4", color: "#3e7cb1", tint: "#e8f0f8",
+        ids: ["inter", "extra", "compare", "bias"] },
+      { title: "⑤ Techno-economics (pp. 7–9)", hint: "Fig. 5", color: "#2f8f5b", tint: "#e7f4ec",
+        ids: ["co2", "breakeven", "assume", "y2030"] },
+      { title: "⑥ Methods (pp. 10–12)", hint: "model details", color: "#5b5fc7", tint: "#ecedfb",
+        ids: ["condin", "rf"] },
+      { title: "⑦ Supplementary / code", hint: "Supp. Note 1 · PulseBat README", color: "#c2185b", tint: "#fce4ec",
+        ids: ["protocol", "u1", "u2", "u18", "socdef"] },
+      { title: "⑧ Our reading (limits)", hint: "not in the paper", color: "#b8860b", tint: "#fff4e0",
+        ids: ["meaning", "onecell", "temp", "cellsonly", "caponly", "chosen", "socknown"] },
+    ] },
+  ],
+  drill: {
+    vae: {
+      title: "Attention VAE — architecture", crumb: "Attention VAE", from: "vae",
+      note: "Built only from the Methods section (pp. 10–12). Shapes as printed: N = number of samples, L = 2 latent dimensions, 64-dimensional embeddings. Methods does not state the optimiser, learning rate, epochs, batch size, or how features are normalised (the sigmoid output suggests a 0–1 scale).",
+      cols: [
+        { title: "① Inputs", hint: "what goes in", color: "#e8833a", tint: "#fdf0e5" },
+        { title: "② Encoder · embed", hint: "dense + ReLU → 64-d", color: "#c2185b", tint: "#fce4ec" },
+        { title: "③ Encoder · attend", hint: "cross-attention → Gaussian", color: "#7a5cc2", tint: "#f0ebfa" },
+        { title: "④ Latent", hint: "scale, then sample (L = 2)", color: "#5b5fc7", tint: "#ecedfb" },
+        { title: "⑤ Decoder · embed", hint: "z and conditions → 64-d", color: "#3e7cb1", tint: "#e8f0f8" },
+        { title: "⑥ Decoder · output", hint: "cross-attention → 21 features", color: "#2b8a8a", tint: "#e3f3f3" },
+        { title: "⑦ Training & use", hint: "loss, generation, regressor", color: "#2f8f5b", tint: "#e7f4ec" },
+      ],
+      nodes: [
+        { id: "x", col: 0, row: 0.5, icon: "⚡", title: "Pulse features x", sub: "Input · N × 21",
+          chips: ["x ∈ ℝ^(N×21)", "N = sample size"],
+          note: "The main input: the 21-dimensional pulse voltage response feature matrix, one row per sample.",
+          src: ["Methods p. 10 (Encoder)"] },
+        { id: "cond", col: 0, row: 2.6, icon: "🎛️", title: "Retirement conditions", sub: "Input · N × 2",
+          chips: ["cond = [SOC, SOH]", "ℝ^(N×2)"],
+          note: "The condition input: each sample's SOC and SOH. Cross-attention uses it to learn how the pulse response depends on the retirement condition (the response shifts considerably with SOC).",
+          src: ["Methods p. 10 (Cross-attention; Encoder)"] },
+        { id: "h", col: 1, row: 0.5, icon: "🧩", title: "Feature embedding H", sub: "Encoder · dense + ReLU",
+          chips: ["21 → 64", "Eq. (4)"],
+          note: "H = ReLU(x·W_hᵀ + b_h) with W_h ∈ ℝ^(64×21): lifts the 21 features into a 64-dimensional embedding.",
+          src: ["Methods pp. 10–11, Eq. (4)"] },
+        { id: "c", col: 1, row: 2.6, icon: "🧩", title: "Condition embedding C", sub: "Encoder · dense + ReLU",
+          chips: ["2 → 64", "Eq. (3)"],
+          note: "C = ReLU(cond·W_cᵀ + b_c) with W_c ∈ ℝ^(64×2): puts the two conditions into the same 64-dimensional space as H.",
+          src: ["Methods p. 10, Eq. (3)"] },
+        { id: "encatt", col: 2, row: 0.5, icon: "🔗", title: "Encoder cross-attention", sub: "Encoder · Attention(H, C, C)",
+          chips: ["query = H", "key, value = C", "Eq. (5)"],
+          note: "Atten_Encoder = Attention(H, C, C) ∈ ℝ^(N×64): the feature embedding attends to the condition embedding. Attention(Q, K, V) = softmax(QKᵀ / √d_k)·V, where d_k is the key dimension and softmax turns scores into weights that sum to 1.",
+          src: ["Methods p. 11, Eq. (5)", "Methods p. 10, Eqs. (1)–(2)"] },
+        { id: "musig", col: 2, row: 1.8, icon: "🎯", title: "Mean and log-variance", sub: "Encoder · output",
+          chips: ["z_mean, z_logvar", "L = 2", "Eqs. (6)–(7)"],
+          note: "Two linear layers on Atten_Encoder give z_mean and z_logvar ∈ ℝ^(N×L): the mean and the log of the variance of a Gaussian for each sample, in an L = 2 dimensional latent space.",
+          src: ["Methods p. 11, Eqs. (6)–(7)"] },
+        { id: "scale", col: 3, row: 0.5, icon: "📏", title: "Latent space scaling", sub: "Latent · T_mean, T_logvar",
+          chips: ["interpolation: T = I", "extrapolation: prior", "Eqs. (8)–(9)"],
+          note: "ẑ_mean = T_mean·z_mean and ẑ_logvar = T_logvar·z_logvar. For interpolation T is the identity (no prior knowledge used). For extrapolation T is built from the mean and variance ratio between the testing and training SOC distributions, using prior knowledge of retirement conditions (stored batteries are discharged, so SOC is typically below 50%). Only SOC is scaled: equal SOH values can stand for physically different batteries, so SOH is not an OOD problem here.",
+          src: ["Methods p. 11, Eqs. (8)–(9)"] },
+        { id: "sample", col: 3, row: 1.8, icon: "🎲", title: "Sampling step", sub: "Latent · reparameterisation",
+          chips: ["ε ~ N(0, I)", "Eq. (10)"],
+          note: "z = z_mean + e^(½·z_logvar) ⊙ ε with Gaussian noise ε ~ N(0, I); the exponential turns the log-variance into a positive spread. This bridges the deterministic encoder output and the stochastic, scaled latent space; z ∈ ℝ^(N×L). (The usual name is the reparameterisation trick; the paper just calls it the sampling step.)",
+          src: ["Methods p. 11, Eq. (10)"] },
+        { id: "h0", col: 4, row: 0.5, icon: "🧩", title: "Latent embedding H′", sub: "Decoder · dense + ReLU",
+          chips: ["L → 64", "Eq. (11)"],
+          note: "H′ = ReLU(z·W_dᵀ + b_d) with W_d ∈ ℝ^(64×L): the first decoder layer lifts the 2-d latent sample back to 64 dimensions.",
+          src: ["Methods p. 11, Eq. (11)"] },
+        { id: "c0", col: 4, row: 2.6, icon: "🎛️", title: "Decoder conditions C′", sub: "Decoder · which condition to draw",
+          chips: ["training: C′ = C", "generating: target SOC, SOH"],
+          note: "When training, C′ = C and the decoder reconstructs the input. When generating, C′ holds the SOH and SOC of the data to be generated, which can be SOC levels that were never measured. Methods does not write out how C′ is computed for new conditions.",
+          src: ["Methods p. 11 (text after Eq. (12))"] },
+        { id: "decatt", col: 5, row: 0.5, icon: "🔗", title: "Decoder cross-attention", sub: "Decoder · Attention(H′, C′, C′)",
+          chips: ["query = H′", "key, value = C′", "Eq. (12)"],
+          note: "Atten_Decoder = Attention(H′, C′, C′) ∈ ℝ^(N×64): the embedded latent sample attends to the condition embedding, the same mechanism as in the encoder.",
+          src: ["Methods p. 11, Eq. (12)"] },
+        { id: "xhat", col: 5, row: 1.8, icon: "📈", title: "Output x̂: 21 features", sub: "Decoder · sigmoid layer",
+          chips: ["64 → 21", "sigmoid", "Eq. (13)"],
+          note: "x̂ = σ(Atten_Decoder·W_oᵀ + b_o) ∈ ℝ^(N×21), with σ the sigmoid. This is the reconstructed pulse feature matrix in training, or the generated one for a new condition.",
+          src: ["Methods p. 11, Eq. (13)"] },
+        { id: "loss", col: 6, row: 0, icon: "⚖️", title: "Loss = 0.5·MSE + 0.5·KL", sub: "Training",
+          chips: ["ω = 0.5 each", "Eqs. (14)–(16)"],
+          note: "Reconstruction loss: MSE between the original x and the reconstructed x̂ (Eq. 14). KL loss: −½ Σ (1 + z_logvar − z_mean² − e^(z_logvar)) (Eq. 15). Total = ω_xent·MSE + ω_KL·KL with both weights 0.5, to balance generation accuracy and diversity.",
+          src: ["Methods p. 11, Eq. (14)", "Methods p. 12, Eqs. (15)–(16)"] },
+        { id: "gen", col: 6, row: 1.3, icon: "🪄", title: "Generate unseen conditions", sub: "Use · synthetic pulse data",
+          chips: ["target SOC, SOH → x̂"],
+          note: "Set C′ to the SOH and SOC you want and decode: x̂ is a synthetic 21-feature pulse sample for that condition, with no new physical test.",
+          src: ["Methods p. 11 (Decoder text)"] },
+        { id: "rfd", col: 6, row: 2.6, icon: "🌲", title: "Random forest (M = 20)", sub: "Use · downstream SoH estimation",
+          chips: ["min leaf 1", "max depth 64", "Eq. (17)"],
+          note: "Estimated SoH = average of M = 20 trees, ŷ = (1/M) Σ h(X; ϑ_m, θ_m). Same hyperparameters in every case for a fair comparison (minimum leaf size 1, maximum depth 64); scikit-learn 1.3.1, Python 3.11.5, random state 0. Accuracy is reported as MAPE (Eq. 18).",
+          src: ["Methods p. 12, Eqs. (17)–(18)"] },
+      ],
+      edges: [
+        ["x", "h", "", "n"], ["cond", "c", "", "n"],
+        ["h", "encatt", "query", "n"], ["c", "encatt", "key & value", "n"], ["encatt", "musig", "linear layers", "n"],
+        ["musig", "scale", "", "n"], ["scale", "sample", "", "n"], ["sample", "h0", "z", "n"],
+        ["h0", "decatt", "query", "n"], ["c", "c0", "C′ = C in training", "n"], ["c0", "decatt", "key & value", "n"],
+        ["decatt", "xhat", "", "n"], ["xhat", "loss", "MSE vs x", "n"], ["musig", "loss", "KL term", "n"],
+        ["xhat", "gen", "with target C′", "n"], ["gen", "rfd", "generated training data", "n"],
+      ],
+      groups: {
+        label: "🧭 Two passes", kind: "route",
+        items: [
+          { id: "T", name: "Training pass", story: "x and cond go through the encoder and latent space; the decoder rebuilds x; the loss compares them.",
+            src: "Methods pp. 10–12, Eqs. (3)–(16)", nodes: ["x", "cond", "h", "c", "encatt", "musig", "scale", "sample", "h0", "c0", "decatt", "xhat", "loss"] },
+          { id: "G", name: "Generation pass", story: "The decoder gets target SOC/SOH as C′ and outputs synthetic features, which train the random forest.",
+            src: "Methods pp. 11–12, Eqs. (10)–(13), (17)", nodes: ["sample", "h0", "c0", "decatt", "xhat", "gen", "rfd"] },
+        ],
+      },
+    },
+  },
   glossary: [
     { term: "SOC conditioning", aka: ["conditioning"], def: "Charging or discharging a battery to a set SOC before testing it, so every measurement is comparable. Costs time and electricity." },
     { term: "U1–U21", aka: ["U1"], def: "The 21 pulse-voltage features: voltages at the turning points of the response to five short pulses." },
+    { term: "Reparameterisation", aka: ["reparameterisation trick", "reparameterization"], def: "Writing a random sample as z = μ + σ·ε with fixed noise ε ~ N(0, I), so the network can still be trained by backpropagation through μ and σ." },
+    { term: "Embedding", aka: ["embedded"], def: "A learned layer that maps raw inputs (here 21 features or 2 conditions) to a vector in a shared space (here 64 numbers)." },
+    { term: "ReLU", cs: true, def: "Rectified linear unit, max(0, x): the simple non-linearity applied after the dense layers." },
+    { term: "Sigmoid", def: "Squashes any number into the range 0–1; used on the decoder's output layer." },
+    { term: "KL loss", aka: ["KL term"], def: "The VAE penalty that keeps each sample's latent Gaussian close to the standard normal N(0, I), so random noise later decodes to realistic data." },
+    { term: "MSE", cs: true, def: "Mean squared error: the average squared difference between original and reconstructed values." },
   ],
   legend: [
     ['<span class="ln-s"></span>', "leads to / feeds"],
@@ -434,10 +587,13 @@ window.MAP = {
 // Card-canvas concept graph engine (React Flow + htm). Reads a global MAP object.
 // MAP = { title, subtitle, logo, focus, cols:[{title,hint,color,tint}], X?, Y0?, DY?, nodes:[...], edges:[...],
 //         groups:{ label, kind:"loops"|"route", items:[{id,name,story,src,color?,kind?,nodes?}] },
-//         legend:[[symbolHtml,text]], sources:[...], howto:[...] }
+//         legend:[[symbolHtml,text]], sources:[...], howto:[...], glossary?:[{term,aka?,def,cs?}],
+//         views?:[{id,name,cols?:[{title,hint,color,tint,ids:[nodeId...]}]}],   // first view without cols = default layout
+//         drill?:{ key:{ title, crumb?, from:nodeId, note?, cols, nodes, edges, groups?, glossary?, X?, Y0?, DY? } } }
 // node = { id, col, row, icon, title, sub, chips?, badge?, note, src:[...], rq?, papers? }
 // edge = [source, target, label, kind ("n"|"neg"), groupId?]
-import React, { useMemo, useState, useCallback, useEffect } from "react";
+// Hash: #nodeId · #S1 · #view=story · #view=story&S2 · #drill=vae · #drill=vae&nodeId
+import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { ReactFlow, Background, Controls, Handle, Position, MarkerType, useNodesState, useReactFlow,
          ReactFlowProvider } from "@xyflow/react";
@@ -445,31 +601,64 @@ import htm from "htm";
 const html = htm.bind(React.createElement);
 
 const M = window.MAP;
-const COLS = M.cols, N = M.nodes, E = M.edges, G = M.groups.items;
-const X = M.X || COLS.map((_, i) => i * 330), Y0 = M.Y0 ?? 70, DY = M.DY ?? 128;
-const byId = Object.fromEntries(N.map(n => [n.id, n]));
-const gOf = Object.fromEntries(G.map(g => [g.id, g]));
-const isRoute = M.groups.kind === "route";
-// Glossary = shared base (window.GLOSSARY_BASE) + map-specific (M.glossary); map entries override base ones.
-const GLmap = new Map();
-[...(window.GLOSSARY_BASE || []), ...(M.glossary || [])].forEach(t => GLmap.set(t.term, t));
-const GLall = [...GLmap.values()];
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const GLre = GLall.map(t => ({ t, re: new RegExp("(^|[^A-Za-z0-9])(" + [t.term, ...(t.aka || [])].map(esc).join("|") + ")(?![A-Za-z0-9])", t.cs ? "" : "i") }));
 const textOf = n => [n.title, n.sub, n.note, ...(n.chips || [])].join(" ");
-const termsFor = n => GLre.filter(({ re }) => re.test(textOf(n))).map(({ t }) => t);
-const used = new Set(); N.forEach(n => termsFor(n).forEach(t => used.add(t.term)));
-const GL = GLall.filter(t => used.has(t.term)).sort((a, b) => a.term.localeCompare(b.term));
 const chipCls = c => "c" + (c.startsWith("✗") ? " warn" : c.startsWith("✓") ? " ok" : c.startsWith("⚠") ? " lim" : "");
+const shortTitle = t => t.replace(/^\S+\s/, "");
+
+// One "diagram" = the main map or a drill-down sub-diagram; everything derived from it lives here.
+function prep(D) {
+  const cols = D.cols, N = D.nodes, E = D.edges || [];
+  const groups = D.groups || { label: "", kind: "route", items: [] };
+  const G = groups.items || [];
+  // Glossary = shared base (window.GLOSSARY_BASE) + map-specific (M.glossary) + diagram-specific; later entries override.
+  const GLmap = new Map();
+  [...(window.GLOSSARY_BASE || []), ...(M.glossary || []), ...(D !== M ? D.glossary || [] : [])].forEach(t => GLmap.set(t.term, t));
+  const GLre = [...GLmap.values()].map(t => ({ t, re: new RegExp("(^|[^A-Za-z0-9])(" + [t.term, ...(t.aka || [])].map(esc).join("|") + ")(?![A-Za-z0-9])", t.cs ? "" : "i") }));
+  const termsFor = n => GLre.filter(({ re }) => re.test(textOf(n))).map(({ t }) => t);
+  const used = new Set(); N.forEach(n => termsFor(n).forEach(t => used.add(t.term)));
+  return {
+    D, cols, N, E, G, groups, isRoute: groups.kind === "route", termsFor,
+    X: D.X || cols.map((_, i) => i * 330), Y0: D.Y0 ?? M.Y0 ?? 70, DY: D.DY ?? M.DY ?? 128,
+    byId: Object.fromEntries(N.map(n => [n.id, n])), gOf: Object.fromEntries(G.map(g => [g.id, g])),
+    GL: [...GLmap.values()].filter(t => used.has(t.term)).sort((a, b) => a.term.localeCompare(b.term)),
+  };
+}
+const MAIN = prep(M);
+const DR = Object.fromEntries(Object.entries(M.drill || {}).map(([k, D]) => [k, prep(D)]));
+const drillFrom = Object.fromEntries(Object.entries(M.drill || {}).map(([k, D]) => [D.from, k]));
+const crumbOf = k => M.drill[k].crumb || M.drill[k].title.split(" — ")[0];
+const VIEWS = M.views && M.views.length ? M.views : null;
+const viewOf = id => (VIEWS && VIEWS.find(v => v.id === id)) || null;
+const VIEW0 = VIEWS ? VIEWS[0].id : null;
+
+// Layout: default = cols + node.col/row; a view with cols stacks its listed ids top-to-bottom per column.
+function layoutFor(dg, view) {
+  const colOf = {}, rowOf = {}, pos = {};
+  if (!view || !view.cols) {
+    dg.N.forEach(n => { colOf[n.id] = n.col; rowOf[n.id] = n.row; pos[n.id] = { x: dg.X[n.col], y: dg.Y0 + n.row * dg.DY }; });
+    return { cols: dg.cols, colOf, rowOf, pos, X: dg.X, custom: false };
+  }
+  view.cols.forEach((c, i) => {
+    const ids = c.ids.filter(id => dg.byId[id]), k = ids.length > 6 ? 0.95 : 1;
+    ids.forEach((id, j) => { colOf[id] = i; rowOf[id] = j * k; pos[id] = { x: i * 330, y: dg.Y0 + j * k * dg.DY }; });
+  });
+  return { cols: view.cols, colOf, rowOf, pos, X: view.cols.map((_, i) => i * 330), custom: true };
+}
+const buildNodes = (dg, lay) => [
+  ...lay.cols.map((c, i) => ({ id: "h-" + i, type: "header", position: { x: lay.X[i], y: 4 }, data: { c, i }, draggable: false, selectable: false })),
+  ...dg.N.map(n => ({ id: n.id, type: "card", position: lay.pos[n.id] || { x: dg.X[n.col], y: dg.Y0 + n.row * dg.DY }, data: { n } })),
+];
 
 const H = [["l", Position.Left], ["r", Position.Right], ["t", Position.Top], ["b", Position.Bottom]];
 function Card({ data }) {
-  const n = data.n, col = COLS[n.col];
+  const n = data.n;
   return html`<div className=${"card " + (data.cls || "")}>
     ${H.map(([k, p]) => html`<${Handle} key=${k + "s"} id=${k + "s"} type="source" position=${p} />`)}
     ${H.map(([k, p]) => html`<${Handle} key=${k + "t"} id=${k + "t"} type="target" position=${p} />`)}
+    ${data.drill && html`<div className="dbadge" title="Has a detailed diagram">🔍</div>`}
     <div className="hd">
-      <div className="ic" style=${{ background: col.tint }}>${n.icon}</div>
+      <div className="ic" style=${{ background: data.tint }}>${n.icon}</div>
       <div style=${{ minWidth: 0 }}><div className="ttl">${n.title}</div><div className="sub">${n.sub}</div></div>
       ${n.badge && html`<div className="badge">${n.badge}</div>`}
     </div>
@@ -482,17 +671,14 @@ function Header({ data }) {
 }
 const nodeTypes = { card: Card, header: Header };
 
-function handlesFor(s, t) {
-  const a = byId[s], b = byId[t];
-  if (b.col > a.col) return ["rs", "lt"];
-  if (b.col < a.col) return ["ls", "rt"];
-  return b.row > a.row ? ["bs", "tt"] : ["ts", "bt"];
+function handlesFor(s, t, lay) {
+  const ca = lay.colOf[s], cb = lay.colOf[t], ra = lay.rowOf[s], rb = lay.rowOf[t];
+  if (cb > ca) return ["rs", "lt"];
+  if (cb < ca) return ["ls", "rt"];
+  if (lay.custom && Math.abs(rb - ra) > 1.3) return ["rs", "rt"]; // skip-edges in a stacked view bow out to the right
+  return rb > ra ? ["bs", "tt"] : ["ts", "bt"];
 }
-const initialNodes = [
-  ...COLS.map((c, i) => ({ id: "h-" + i, type: "header", position: { x: X[i], y: 4 }, data: { c, i }, draggable: false, selectable: false })),
-  ...N.map(n => ({ id: n.id, type: "card", position: { x: X[n.col], y: Y0 + n.row * DY }, data: { n } })),
-];
-const groupNodes = g => {
+const groupNodes = (g, E) => {
   if (!g) return null;
   if (g.nodes) return new Set(g.nodes);
   const s = new Set(); E.forEach(([a, b, , , l]) => { if (l === g.id) { s.add(a); s.add(b); } });
@@ -501,11 +687,23 @@ const groupNodes = g => {
 };
 const edgeInGroup = (e, g, set) => g.nodes ? (set.has(e[0]) && set.has(e[1])) : e[4] === g.id;
 
+// Initial state from the hash.
+const HP = decodeURIComponent(location.hash.slice(1)).split("&").filter(Boolean);
+const hv = HP.find(p => p.startsWith("view="))?.slice(5), hd = HP.find(p => p.startsWith("drill="))?.slice(6);
+const H_VIEW = viewOf(hv) ? hv : VIEW0, H_DRILL = DR[hd] ? hd : null;
+const hRest = HP.filter(p => !p.includes("="));
+const H_DG = H_DRILL ? DR[H_DRILL] : MAIN;
+const H_SEL = hRest.find(p => H_DG.byId[p]) || null, H_GRP = hRest.find(p => H_DG.gOf[p]) || null;
+const ease = k => k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+
 function App() {
-  const [nodes, , onNodesChange] = useNodesState(initialNodes);
-  const h0 = decodeURIComponent(location.hash.slice(1));
-  const [sel, setSel] = useState(byId[h0] ? h0 : null);
-  const [grp, setGrp] = useState(gOf[h0] ? h0 : null);
+  const [view, setView] = useState(H_VIEW);
+  const [drill, setDrill] = useState(H_DRILL);
+  const dg = drill ? DR[drill] : MAIN;
+  const lay = useMemo(() => layoutFor(dg, drill ? null : viewOf(view)), [dg, drill, view]);
+  const [nodes, setNodes, onNodesChange] = useNodesState(useMemo(() => buildNodes(H_DG, layoutFor(H_DG, H_DRILL ? null : viewOf(H_VIEW))), []));
+  const [sel, setSel] = useState(H_SEL);
+  const [grp, setGrp] = useState(H_SEL ? null : H_GRP);
   const [hidden, setHidden] = useState({});
   const [q, setQ] = useState("");
   const [showAll, setShowAll] = useState(false);
@@ -513,33 +711,38 @@ function App() {
   const [leftOpen, setLeftOpen] = useState(wide);
   const [rightOpen, setRightOpen] = useState(wide);
   const rf = useReactFlow();
-  const refit = () => setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 60);
+  const anim = useRef(0);
+  const fit = () => rf.fitView({ padding: 0.08, duration: 300 });
+  const refit = () => setTimeout(fit, 60);
   useEffect(() => { if ((sel || grp) && !rightOpen) setRightOpen(true); }, [sel, grp]);
 
-  const visible = useCallback(id => { const n = byId[id]; return !n || !hidden[n.col]; }, [hidden]);
+  const { cols: LC } = lay, { N, E, G, byId, gOf, isRoute } = dg;
+  const hk = (drill ? "d:" + drill : "v:" + view) + ":";
+  const visible = useCallback(id => lay.colOf[id] !== undefined && !hidden[hk + lay.colOf[id]], [hidden, lay, hk]);
   const hood = useMemo(() => {
     if (!sel) return null;
     const s = new Set([sel]); E.forEach(([a, b]) => { if (a === sel) s.add(b); if (b === sel) s.add(a); }); return s;
-  }, [sel]);
-  const gSet = useMemo(() => groupNodes(gOf[grp]), [grp]);
+  }, [sel, E]);
+  const gSet = useMemo(() => groupNodes(gOf[grp], E), [grp, dg]);
   const hits = useMemo(() => {
     const t = q.trim().toLowerCase(); if (!t) return null;
     return new Set(N.filter(n => (n.title + " " + n.sub + " " + n.note).toLowerCase().includes(t)).map(n => n.id));
-  }, [q]);
+  }, [q, N]);
 
   const shownNodes = nodes.map(nd => {
-    if (nd.type === "header") return { ...nd, hidden: !!hidden[nd.data.i] };
+    if (nd.type === "header") return { ...nd, hidden: !!hidden[hk + nd.data.i] };
     let cls = "";
     if (hood) cls = nd.id === sel ? "focus" : hood.has(nd.id) ? "" : "dim";
     else if (gSet) cls = gSet.has(nd.id) ? "" : "dim";
     else if (hits) cls = hits.has(nd.id) ? "hit" : "dim";
-    return { ...nd, hidden: !visible(nd.id), data: { ...nd.data, cls } };
+    const n = nd.data.n;
+    return { ...nd, hidden: !visible(nd.id), data: { ...nd.data, cls, tint: dg.cols[n.col].tint, drill: !drill && !!drillFrom[n.id] } };
   });
 
   const g = gOf[grp];
   const edges = E.filter(([a, b]) => visible(a) && visible(b)).map((e, i) => {
     const [a, b, label, kind, l] = e;
-    const [sh, th] = handlesFor(a, b);
+    const [sh, th] = handlesFor(a, b, lay);
     const inHood = hood && (a === sel || b === sel);
     const inG = g && edgeInGroup(e, g, gSet);
     const active = inHood || inG;
@@ -556,7 +759,46 @@ function App() {
   });
 
   const pick = id => { setGrp(null); setSel(id); };
-  useEffect(() => { const t = setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 60); return () => clearTimeout(t); }, [hidden, leftOpen, rightOpen]);
+  useEffect(() => { const t = setTimeout(fit, 60); return () => clearTimeout(t); }, [hidden, leftOpen, rightOpen, drill]);
+  // Keep the hash in sync with view / drill (only after the first render, so initial #nodeId links survive).
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    const h = drill ? "drill=" + drill : view !== VIEW0 ? "view=" + view : "";
+    history.replaceState(null, "", location.pathname + location.search + (h ? "#" + h : ""));
+  }, [view, drill]);
+
+  // Switch view: animate cards from where they are to the new layout, then fit.
+  const switchView = id => {
+    if (id === view || drill) return;
+    const lay2 = layoutFor(MAIN, viewOf(id)), target = buildNodes(MAIN, lay2);
+    const cur = Object.fromEntries(nodes.map(n => [n.id, n.position]));
+    const vis0 = id0 => lay.colOf[id0] !== undefined;
+    setView(id);
+    const t0 = performance.now(), dur = 480, token = ++anim.current;
+    let done = false;
+    const finish = () => { if (done || token !== anim.current) return; done = true; setNodes(target); refit(); };
+    const step = now => {
+      if (done || token !== anim.current) return;
+      const k = Math.min(1, (now - t0) / dur), e = ease(k);
+      if (k >= 1) return finish();
+      setNodes(target.map(n => {
+        const a = cur[n.id];
+        if (n.type === "header" || !a || !vis0(n.id)) return n;
+        return { ...n, position: { x: a.x + (n.position.x - a.x) * e, y: a.y + (n.position.y - a.y) * e } };
+      }));
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    setTimeout(finish, dur + 120); // rAF can be paused (background tab / headless); always land on the final layout
+  };
+  const openDrill = k => {
+    anim.current++;
+    const d2 = k ? DR[k] : MAIN;
+    setSel(k ? null : M.drill[drill]?.from || null); setGrp(null); setQ("");
+    setDrill(k);
+    setNodes(buildNodes(d2, layoutFor(d2, k ? null : viewOf(view))));
+  };
 
   const sn = sel && byId[sel];
   const ins = sn ? E.filter(e => e[1] === sel) : [], outs = sn ? E.filter(e => e[0] === sel) : [];
@@ -568,17 +810,21 @@ function App() {
   const tagOf = (it, idx) => isRoute
     ? html`<span className="num">${idx + 1}</span>`
     : html`<span className="tag" style=${{ background: it.color }}>${it.id}</span>`;
+  const DD = drill && M.drill[drill];
+  const snDrill = sn && !drill && drillFrom[sn.id];
 
   return html`<div className="app"><div className="shell">
     <aside className=${"side" + (leftOpen ? "" : " closed")}>
       <button className="fold" title="Hide panel" onClick=${() => setLeftOpen(false)}>«</button>
       <div className="brand"><div className="logo">${M.logo}</div><div><b>${M.title}</b><span>${M.subtitle}</span></div></div>
       <input className="search" placeholder="Find a node" value=${q} onInput=${e => { setQ(e.target.value); setSel(null); setGrp(null); }} />
-      <div className="focusq">❓ ${M.focus}</div>
-      <div className="sec-h"><span>Layers</span><span>${N.length}</span></div>
-      ${COLS.map((c, i) => html`<div key=${i} className=${"row " + (hidden[i] ? "off" : "")} onClick=${() => setHidden(h => ({ ...h, [i]: !h[i] }))}>
-          <span className="dot" style=${{ background: c.color }}></span>${c.title.replace(/^\S+\s/, "")}<span className="cnt">${N.filter(n => n.col === i).length}</span></div>`)}
-      <div className="sec-h"><span>${M.groups.label}</span><span>${G.length}</span></div>
+      ${DD ? html`<div className="focusq drillq">🔍 ${DD.title}
+          <button className="pbtn" style=${{ marginTop: 8, display: "block" }} onClick=${() => openDrill(null)}>← Back to the main map</button></div>`
+        : html`<div className="focusq">❓ ${M.focus}</div>`}
+      <div className="sec-h"><span>Layers</span><span>${N.filter(n => lay.colOf[n.id] !== undefined).length}</span></div>
+      ${LC.map((c, i) => html`<div key=${hk + i} className=${"row " + (hidden[hk + i] ? "off" : "")} onClick=${() => setHidden(h => ({ ...h, [hk + i]: !h[hk + i] }))}>
+          <span className="dot" style=${{ background: c.color }}></span>${shortTitle(c.title)}<span className="cnt">${N.filter(n => lay.colOf[n.id] === i).length}</span></div>`)}
+      ${G.length > 0 && html`<div className="sec-h"><span>${dg.groups.label}</span><span>${G.length}</span></div>`}
       ${G.map((it, idx) => html`<div key=${it.id} className=${"row loop " + (grp === it.id ? "on" : "")}
           onClick=${() => { setSel(null); setQ(""); setGrp(grp === it.id ? null : it.id); }}>
           <div className="lt">${tagOf(it, idx)}${it.name}</div><div className="ls">${it.story}</div></div>`)}
@@ -587,15 +833,19 @@ function App() {
     <main className="canvas">
       <div className="topbar">
         ${!leftOpen && html`<button className="btn ghost" title="Show side panel" onClick=${() => setLeftOpen(true)}>☰ ${M.title}</button>`}
-        <span className="chip"><b>${N.length}</b> concepts · <b>${E.length}</b> links</span>
+        ${DD && html`<span className="crumb"><a onClick=${() => openDrill(null)}>${M.title}</a><i>›</i><b>${crumbOf(drill)}</b></span>`}
+        ${VIEWS && !drill && html`<span className="seg">${VIEWS.map(v => html`<button key=${v.id} className=${v.id === view ? "on" : ""} onClick=${() => switchView(v.id)}>${v.name}</button>`)}</span>`}
+        <span className="chip"><b>${N.filter(n => lay.colOf[n.id] !== undefined).length}</b> concepts · <b>${E.length}</b> links</span>
         ${(sel || grp || q) && html`<button className="btn ghost" onClick=${() => { setSel(null); setGrp(null); setQ(""); }}>✕ Clear</button>`}
         <button className="btn ghost" style=${{ marginLeft: "auto" }} onClick=${() => setShowAll(v => !v)}>${showAll ? "🔇 Quiet links" : "🕸️ Show all links"}</button>
-        <button className="btn" style=${{ marginLeft: 0 }} onClick=${() => rf.fitView({ padding: 0.08, duration: 300 })}>⤢ Fit</button>
+        <button className="btn" style=${{ marginLeft: 0 }} onClick=${fit}>⤢ Fit</button>
         ${!rightOpen && html`<button className="btn ghost" style=${{ marginLeft: 0 }} title="Show details" onClick=${() => setRightOpen(true)}>ⓘ Details</button>`}
       </div>
       <${ReactFlow} nodes=${shownNodes} edges=${edges} nodeTypes=${nodeTypes} onNodesChange=${onNodesChange}
         onNodeClick=${(_, n) => n.type === "card" && pick(n.id === sel ? null : n.id)} onPaneClick=${() => setSel(null)}
-        fitView fitViewOptions=${{ padding: 0.08 }} minZoom=${0.2} maxZoom=${2} nodesConnectable=${false} proOptions=${{ hideAttribution: true }}>
+        onNodeDoubleClick=${(_, n) => !drill && drillFrom[n.id] && openDrill(drillFrom[n.id])}
+        fitView fitViewOptions=${{ padding: 0.08 }} minZoom=${0.2} maxZoom=${2} nodesConnectable=${false} zoomOnDoubleClick=${false}
+        proOptions=${{ hideAttribution: true }}>
         <${Background} variant="dots" gap=${18} size=${1.2} color="#d9d6cf" />
         <${Controls} showInteractive=${false} position="bottom-right" />
       </${ReactFlow}>
@@ -604,12 +854,13 @@ function App() {
     <aside className=${"detail" + (rightOpen ? "" : " closed")}>
       <button className="fold r" title="Hide panel" onClick=${() => setRightOpen(false)}>»</button>
       ${sn ? html`<div>
-          <div className="kicker"><span className="dot" style=${{ display: "inline-block", background: COLS[sn.col].color, marginRight: 6 }}></span>${COLS[sn.col].title.replace(/^\S+\s/, "")}</div>
+          <div className="kicker"><span className="dot" style=${{ display: "inline-block", background: dg.cols[sn.col].color, marginRight: 6 }}></span>${shortTitle(dg.cols[sn.col].title)}</div>
           <h2>${sn.icon} ${sn.title}</h2>
           <div className="muted">${sn.sub}</div>
+          ${snDrill && html`<button className="pbtn on drillbtn" onClick=${() => openDrill(snDrill)}>🔍 Open diagram: ${crumbOf(snDrill)}</button>`}
           <p>${sn.note}</p>
           ${sn.chips && html`<div className="chips">${sn.chips.map(c => html`<span key=${c} className=${chipCls(c)}>${c}</span>`)}</div>`}
-          ${termsFor(sn).length > 0 && html`<div className="box terms"><h4>📖 Terms</h4>${termsFor(sn).map(t => html`<div key=${t.term} className="term"><b>${t.term}</b> — ${t.def}</div>`)}</div>`}
+          ${dg.termsFor(sn).length > 0 && html`<div className="box terms"><h4>📖 Terms</h4>${dg.termsFor(sn).map(t => html`<div key=${t.term} className="term"><b>${t.term}</b> — ${t.def}</div>`)}</div>`}
           ${sn.rq && html`<div className="box rq"><h4>🎯 For our review</h4>${sn.rq}</div>`}
           ${ins.length > 0 && html`<div className="box"><h4>Fed by</h4>${ins.map(e => L(e, e[0]))}</div>`}
           ${outs.length > 0 && html`<div className="box"><h4>Leads to</h4>${outs.map(e => L(e, e[1]))}</div>`}
@@ -626,18 +877,31 @@ function App() {
             ${G.indexOf(g) < G.length - 1 && html`<button className="pbtn on" onClick=${() => setGrp(G[G.indexOf(g) + 1].id)}>Next step →</button>`}
           </div>`}
         </div>`
+      : DD ? html`<div>
+          <div className="kicker">Detailed diagram · zoomed in from “${MAIN.byId[DD.from]?.title || DD.from}”</div>
+          <h2>🔍 ${DD.title}</h2>
+          ${DD.note && html`<p className="muted">${DD.note}</p>`}
+          <div className="box"><h4>Try</h4>
+            <div>• <b>Click a card</b> to trace what feeds it and what it feeds</div>
+            <div>• <b>${M.title} ›</b> in the top bar takes you back</div></div>
+          ${dg.GL.length > 0 && html`<details className="box gloss" open><summary><h4 style=${{ display: "inline" }}>📖 Glossary (${dg.GL.length})</h4></summary>
+            ${dg.GL.map(t => html`<div key=${t.term} className="term"><b>${t.term}</b> — ${t.def}</div>`)}</details>`}
+          <button className="pbtn" onClick=${() => openDrill(null)}>← Back to the main map</button>
+        </div>`
       : html`<div>
           <h2 style=${{ marginTop: 0 }}>How to read</h2>
           ${M.howto.map((t, i) => html`<p key=${i} className="muted">${t}</p>`)}
           <div className="box"><h4>Try</h4>
             <div>• <b>Click a card</b> to trace what feeds it and what it feeds</div>
-            <div>• <b>${isRoute ? "Click step 1" : "Click a loop"}</b> on the left${isRoute ? " and follow Next →" : " to light it up"}</div>
+            ${G.length > 0 && html`<div>• <b>${isRoute ? "Click step 1" : "Click a loop"}</b> on the left${isRoute ? " and follow Next →" : " to light it up"}</div>`}
+            ${VIEWS && html`<div>• <b>Switch view</b> in the top bar to regroup the same cards</div>`}
+            ${M.drill && html`<div>• Cards with <b>🔍</b> open a detailed diagram</div>`}
             <div>• Hide layers to simplify; drag cards freely</div></div>
           <div className="box"><h4>Legend</h4><div className="legend">
             ${M.legend.map(([sym, txt], i) => html`<${React.Fragment} key=${i}><span dangerouslySetInnerHTML=${{ __html: sym }}></span><span>${txt}</span></${React.Fragment}>`)}
           </div></div>
-          <details className="box gloss"><summary><h4 style=${{ display: "inline" }}>📖 Glossary (${GL.length})</h4></summary>
-            ${GL.map(t => html`<div key=${t.term} className="term"><b>${t.term}</b> — ${t.def}</div>`)}</details>
+          <details className="box gloss"><summary><h4 style=${{ display: "inline" }}>📖 Glossary (${MAIN.GL.length})</h4></summary>
+            ${MAIN.GL.map(t => html`<div key=${t.term} className="term"><b>${t.term}</b> — ${t.def}</div>`)}</details>
           <div className="box"><h4>Sources</h4>${M.sources.map((s, i) => html`<div key=${i} className="src">${s}</div>`)}</div>
         </div>`}
     </aside>
